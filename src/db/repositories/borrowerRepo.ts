@@ -3,20 +3,27 @@ import { Borrower, BorrowerSchema, NewBorrowerInput } from '../../types/domain';
 
 export class BorrowerRepository {
   /**
-   * Add a new borrower with strict Zod validation and atomic sync queuing.
+   * Add a new borrower with strict Zod validation, atomic duplicate prevention,
+   * and atomic sync queuing.
    */
   async addBorrower(input: NewBorrowerInput): Promise<Borrower> {
     // 1. Strict Zod Schema Validation (Swiss Cheese Layer 2)
     const validated = BorrowerSchema.parse(input);
 
-    // 2. Duplicate Phone Guard Rail: check if phone already exists
-    const existing = await db.borrowers.where('phone').equals(validated.phone).first();
-    if (existing && existing.isActive) {
-      throw new Error(`A borrower with phone ${validated.phone} already exists (${existing.name})`);
-    }
-
-    // 3. Atomic Database Transaction (All-or-Nothing)
+    // 2. Atomic Database Transaction with Race-Condition Protection
     await db.transaction('rw', [db.borrowers, db.syncQueue], async () => {
+      // Check duplicate phone INSIDE the transaction block
+      const existing = await db.borrowers
+        .where('phone')
+        .equals(validated.phone)
+        .first();
+
+      if (existing && existing.isActive) {
+        throw new Error(
+          `A borrower with phone ${validated.phone} already exists (${existing.name})`
+        );
+      }
+
       await db.borrowers.add(validated);
       await db.syncQueue.add({
         table: 'borrowers',
@@ -31,23 +38,37 @@ export class BorrowerRepository {
   }
 
   /**
-   * Update an existing borrower's details.
+   * Update an existing borrower's details with atomic clash checking.
    */
   async updateBorrower(id: string, updates: Partial<Borrower>): Promise<Borrower> {
-    const existing = await db.borrowers.get(id);
-    if (!existing) {
-      throw new Error(`Borrower not found with ID: ${id}`);
-    }
+    return await db.transaction('rw', [db.borrowers, db.syncQueue], async () => {
+      const existing = await db.borrowers.get(id);
+      if (!existing) {
+        throw new Error(`Borrower not found with ID: ${id}`);
+      }
 
-    const merged = {
-      ...existing,
-      ...updates,
-      updatedAt: new Date().toISOString(),
-    };
+      // If phone is being changed, verify it doesn't clash with another active borrower
+      if (updates.phone && updates.phone !== existing.phone) {
+        const clash = await db.borrowers
+          .where('phone')
+          .equals(updates.phone)
+          .first();
 
-    const validated = BorrowerSchema.parse(merged);
+        if (clash && clash.id !== id && clash.isActive) {
+          throw new Error(
+            `Phone number ${updates.phone} is already registered to ${clash.name}`
+          );
+        }
+      }
 
-    await db.transaction('rw', [db.borrowers, db.syncQueue], async () => {
+      const merged = {
+        ...existing,
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      };
+
+      const validated = BorrowerSchema.parse(merged);
+
       await db.borrowers.put(validated);
       await db.syncQueue.add({
         table: 'borrowers',
@@ -56,9 +77,9 @@ export class BorrowerRepository {
         payload: validated as unknown as Record<string, unknown>,
         timestamp: Date.now(),
       });
-    });
 
-    return validated;
+      return validated;
+    });
   }
 
   /**

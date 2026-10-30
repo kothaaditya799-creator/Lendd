@@ -145,7 +145,7 @@ export type SyncAction = z.infer<typeof SyncActionEnum>;
 
 export interface SyncQueueItem {
   id?: number; // Auto-incrementing primary key
-  table: 'borrowers' | 'loans' | 'payment_schedules';
+  table: 'borrowers' | 'loans' | 'payment_schedule';
   recordId: string;
   action: SyncAction;
   payload: Record<string, unknown>;

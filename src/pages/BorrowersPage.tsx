@@ -13,6 +13,7 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({ language }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form State
   const [name, setName] = useState('');
@@ -39,10 +40,13 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({ language }) => {
     loadBorrowers();
   }, [searchQuery]);
 
-  // Handle Form Submit with Zod Guard Rails
+  // Handle Form Submit with Zod Guard Rails & Double-Tap Prevention
   const handleAddBorrower = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return; // Prevent double-tap race
+
     setFormError(null);
+    setIsSubmitting(true);
 
     try {
       // Physical sanitization: strip non-digits from phone
@@ -74,57 +78,58 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({ language }) => {
       await loadBorrowers();
     } catch (err: unknown) {
       if (err && typeof err === 'object' && 'errors' in err) {
-        // Zod validation error
         const zodErr = err as { errors: Array<{ message: string }> };
         setFormError(zodErr.errors[0]?.message || 'Invalid input');
       } else {
         setFormError(err instanceof Error ? err.message : 'Failed to save borrower');
       }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
     <div className="p-4 space-y-4">
-      {/* Top Header & Add Button */}
+      {/* Top Header & 56px Add Button */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-slate-800">
           {isTe ? 'రుణగ్రహీతల జాబితా' : 'Borrower Directory'}
         </h2>
         <button
           onClick={() => setIsModalOpen(true)}
-          className="flex min-h-[44px] items-center space-x-1.5 bg-brand-700 hover:bg-brand-800 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md active:scale-95 transition-all"
+          className="flex min-h-[56px] items-center space-x-2 bg-brand-700 hover:bg-brand-800 text-white px-4 py-2 rounded-2xl text-base font-bold shadow-md active:scale-95 transition-all"
         >
-          <UserPlus className="h-4 w-4" />
+          <UserPlus className="h-5 w-5" />
           <span>{isTe ? 'కొత్త వ్యక్తి' : 'Add Borrower'}</span>
         </button>
       </div>
 
-      {/* Search Input Bar */}
+      {/* 56px Search Input Bar */}
       <div className="relative">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder={isTe ? 'పేరు లేదా ఫోన్ నంబర్ శోధించండి...' : 'Search by name or phone...'}
-          className="w-full min-h-[52px] pl-11 pr-4 bg-white border border-slate-200 rounded-xl text-base placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+          className="w-full min-h-[56px] pl-12 pr-4 bg-white border border-slate-200 rounded-2xl text-base placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
         />
       </div>
 
       {/* Borrowers List */}
       {isLoading ? (
-        <div className="text-center py-8 text-sm text-slate-400">
+        <div className="text-center py-8 text-base font-semibold text-slate-400">
           {isTe ? 'లోడ్ అవుతోంది...' : 'Loading...'}
         </div>
       ) : borrowers.length === 0 ? (
         <div className="bg-white rounded-2xl p-8 shadow-sm border border-slate-200 text-center space-y-3">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-brand-50 text-brand-700">
-            <Users className="h-7 w-7" />
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-brand-50 text-brand-700">
+            <Users className="h-8 w-8" />
           </div>
-          <h3 className="text-base font-bold text-slate-700">
+          <h3 className="text-lg font-bold text-slate-700">
             {isTe ? 'రుణగ్రహీతలు ఎవరూ లేరు' : 'No Borrowers Found'}
           </h3>
-          <p className="text-sm text-slate-400">
+          <p className="text-base text-slate-500">
             {isTe
               ? 'మొదటి రుణగ్రహీతను జోడించడానికి పైన ఉన్న బటన్‌ను నొక్కండి.'
               : 'Tap "Add Borrower" above to create your first borrower in the local vault.'}
@@ -137,20 +142,20 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({ language }) => {
               key={borrower.id}
               className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex items-center justify-between"
             >
-              <div className="flex items-center space-x-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-brand-800 font-bold text-lg">
+              <div className="flex items-center space-x-3.5">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-100 text-brand-800 font-bold text-xl shadow-inner">
                   {borrower.name.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <h4 className="text-base font-bold text-slate-900 leading-tight">
+                  <h4 className="text-xl font-bold text-slate-900 leading-tight">
                     {borrower.name}
                   </h4>
-                  <p className="text-xs font-semibold text-slate-500 mt-0.5 flex items-center space-x-1">
-                    <Phone className="h-3.5 w-3.5 text-brand-600 inline" />
+                  <p className="text-base font-semibold text-slate-600 mt-1 flex items-center space-x-1">
+                    <Phone className="h-4 w-4 text-brand-600 inline" />
                     <span>+91 {borrower.phone}</span>
                   </p>
                   {borrower.guarantorName && (
-                    <p className="text-[11px] text-slate-400 mt-0.5">
+                    <p className="text-sm font-medium text-slate-500 mt-0.5">
                       {isTe ? 'హామీదారు: ' : 'Ref: '}
                       {borrower.guarantorName}
                     </p>
@@ -160,11 +165,11 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({ language }) => {
 
               {/* Trust Score Badge */}
               <div className="flex flex-col items-end">
-                <span className="flex items-center space-x-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 border border-emerald-200">
-                  <ShieldCheck className="h-3.5 w-3.5" />
+                <span className="flex items-center space-x-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-sm font-bold text-emerald-700 border border-emerald-200 shadow-sm">
+                  <ShieldCheck className="h-4 w-4" />
                   <span>{borrower.trustScore.toFixed(1)}</span>
                 </span>
-                <span className="text-[10px] text-slate-400 mt-1">
+                <span className="text-xs font-semibold text-slate-500 mt-1">
                   {isTe ? 'నమ్మకం స్కోర్' : 'Trust Score'}
                 </span>
               </div>
@@ -176,15 +181,15 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({ language }) => {
       {/* Add Borrower Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-2xl p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-lg font-bold text-slate-900">
+              <h3 className="text-xl font-bold text-slate-900">
                 {isTe ? 'కొత్త రుణగ్రహీత వివరాలు' : 'Add New Borrower'}
               </h3>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="p-1 rounded-full text-slate-400 hover:text-slate-600 active:scale-95"
+                className="flex h-11 w-11 items-center justify-center rounded-full text-slate-400 hover:text-slate-600 active:scale-95"
               >
                 <X className="h-6 w-6" />
               </button>
@@ -192,15 +197,15 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({ language }) => {
 
             {/* Error Banner */}
             {formError && (
-              <div className="rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700 border border-red-200">
+              <div className="rounded-xl bg-red-50 p-3.5 text-sm font-bold text-red-700 border border-red-200">
                 ⚠️ {formError}
               </div>
             )}
 
             <form onSubmit={handleAddBorrower} className="space-y-4">
-              {/* Name Field */}
+              {/* Name Field (56px) */}
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                <label className="block text-sm font-bold uppercase tracking-wider text-slate-700 mb-1.5">
                   {isTe ? 'పూర్తి పేరు *' : 'Full Name *'}
                 </label>
                 <input
@@ -209,17 +214,17 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({ language }) => {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Ravi Kumar"
-                  className="w-full min-h-[50px] px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-base focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full min-h-[56px] px-4 bg-slate-50 border border-slate-200 rounded-2xl text-base focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </div>
 
-              {/* Phone Field */}
+              {/* Phone Field (56px) */}
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                <label className="block text-sm font-bold uppercase tracking-wider text-slate-700 mb-1.5">
                   {isTe ? 'మొబైల్ నంబర్ (10 అంకెలు) *' : 'Mobile Number (10 Digits) *'}
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base font-bold text-slate-400">
                     +91
                   </span>
                   <input
@@ -230,26 +235,26 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({ language }) => {
                     value={phone}
                     onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
                     placeholder="9876543210"
-                    className="w-full min-h-[50px] pl-14 pr-3.5 bg-slate-50 border border-slate-200 rounded-xl text-base font-semibold tracking-wide focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full min-h-[56px] pl-16 pr-4 bg-slate-50 border border-slate-200 rounded-2xl text-lg font-bold tracking-wider focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                   />
                 </div>
-                <p className="text-[11px] text-slate-400 mt-1">
+                <p className="text-xs font-medium text-slate-500 mt-1">
                   {isTe ? '6, 7, 8 లేదా 9 తో ప్రారంభం కావాలి' : 'Must start with 6, 7, 8, or 9'}
                 </p>
               </div>
 
-              {/* Guarantor Details (Optional) */}
+              {/* Guarantor Details (56px each) */}
               <div className="pt-2 border-t border-slate-100">
-                <p className="text-xs font-bold text-slate-700 mb-2">
+                <p className="text-sm font-bold text-slate-800 mb-2">
                   {isTe ? 'హామీదారు / రిఫరెన్స్ (ఐచ్ఛికం)' : 'Guarantor / Reference (Optional)'}
                 </p>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-2">
                   <input
                     type="text"
                     value={guarantorName}
                     onChange={(e) => setGuarantorName(e.target.value)}
                     placeholder={isTe ? 'హామీదారు పేరు' : 'Guarantor Name'}
-                    className="w-full min-h-[46px] px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full min-h-[56px] px-4 bg-slate-50 border border-slate-200 rounded-2xl text-base focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                   />
                   <input
                     type="tel"
@@ -257,15 +262,15 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({ language }) => {
                     maxLength={10}
                     value={guarantorPhone}
                     onChange={(e) => setGuarantorPhone(e.target.value.replace(/\D/g, ''))}
-                    placeholder="10-digit Phone"
-                    className="w-full min-h-[46px] px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    placeholder={isTe ? 'హామీదారు ఫోన్ నంబర్' : 'Guarantor 10-digit Phone'}
+                    className="w-full min-h-[56px] px-4 bg-slate-50 border border-slate-200 rounded-2xl text-base font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                   />
                 </div>
               </div>
 
               {/* Address (Optional) */}
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                <label className="block text-sm font-bold uppercase tracking-wider text-slate-700 mb-1.5">
                   {isTe ? 'చిరునామా / ల్యాండ్‌మార్క్ (ఐచ్ఛికం)' : 'Address / Landmark (Optional)'}
                 </label>
                 <textarea
@@ -273,16 +278,19 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({ language }) => {
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder={isTe ? 'ఉదా. గాంధీ సెంటర్, దుకాణం #4' : 'e.g. Gandhi Center, Shop #4'}
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-base focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </div>
 
-              {/* Submit Button */}
+              {/* Submit Button (56px with isSubmitting state) */}
               <button
                 type="submit"
-                className="w-full min-h-[54px] rounded-xl bg-brand-700 hover:bg-brand-800 text-white font-bold text-base shadow-lg active:scale-95 transition-all"
+                disabled={isSubmitting}
+                className="w-full min-h-[56px] rounded-2xl bg-brand-700 hover:bg-brand-800 disabled:bg-slate-300 text-white font-bold text-lg shadow-lg active:scale-95 transition-all"
               >
-                {isTe ? '✓ భద్రపరచు (Save Borrower)' : '✓ Save Borrower'}
+                {isSubmitting
+                  ? (isTe ? 'భద్రపరుస్తోంది...' : 'Saving...')
+                  : (isTe ? '✓ భద్రపరచు (Save Borrower)' : '✓ Save Borrower')}
               </button>
             </form>
           </div>

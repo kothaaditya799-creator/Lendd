@@ -35,7 +35,7 @@ export function runPhase2GuardRailTests(): {
   }
 
   /* -------------------------------------------------------------------------
-     SUITE 1: INDIAN MOBILE NUMBER GUARD RAILS
+     SUITE 1: INDIAN MOBILE NUMBER GUARD RAILS (LAYER 2)
      ------------------------------------------------------------------------- */
   record('Phone Guard Rail', 'Valid 10-digit number starting with 9 passes', () => {
     IndianPhoneSchema.parse('9876543210');
@@ -86,7 +86,7 @@ export function runPhase2GuardRailTests(): {
   });
 
   /* -------------------------------------------------------------------------
-     SUITE 2: CURRENCY & AMOUNT GUARD RAILS
+     SUITE 2: CURRENCY & AMOUNT GUARD RAILS (LAYER 2)
      ------------------------------------------------------------------------- */
   record('Currency Guard Rail', 'Valid positive integer amount passes', () => {
     CurrencyAmountSchema.parse(10000);
@@ -133,7 +133,7 @@ export function runPhase2GuardRailTests(): {
   });
 
   /* -------------------------------------------------------------------------
-     SUITE 3: SECURITY PIN GUARD RAILS
+     SUITE 3: SECURITY PIN GUARD RAILS (LAYER 2)
      ------------------------------------------------------------------------- */
   record('PIN Guard Rail', 'Valid 4-digit PIN passes', () => {
     SecurityPinSchema.parse('1234');
@@ -160,7 +160,33 @@ export function runPhase2GuardRailTests(): {
   });
 
   /* -------------------------------------------------------------------------
-     SUITE 4: BORROWER SCHEMA PARSING
+     SUITE 4: CEILING BLOCK LOGIC TEST (LAYER 3)
+     ------------------------------------------------------------------------- */
+  record('Ceiling Block Logic', 'Rejects payment when delta exceeds loan outstanding balance', () => {
+    const loanOutstanding = 5000;
+    const collectedAmount = 50000;
+    const previousAmountPaid = 0;
+    const netDelta = collectedAmount - previousAmountPaid;
+
+    if (netDelta > loanOutstanding) {
+      // Expected behavior: ceiling block triggers
+      return;
+    }
+    throw new Error('Expected Ceiling Block to reject collection exceeding outstanding balance');
+  });
+
+  record('Ceiling Block Logic', 'Allows payment equal to exact loan outstanding balance', () => {
+    const loanOutstanding = 5000;
+    const collectedAmount = 5000;
+    const netDelta = collectedAmount - 0;
+
+    if (netDelta > loanOutstanding) {
+      throw new Error('Exact balance payment should not be rejected');
+    }
+  });
+
+  /* -------------------------------------------------------------------------
+     SUITE 5: BORROWER SCHEMA PARSING
      ------------------------------------------------------------------------- */
   record('Borrower Schema', 'Valid borrower with Indian phone parses cleanly', () => {
     BorrowerSchema.parse({

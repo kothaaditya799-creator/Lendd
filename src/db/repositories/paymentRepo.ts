@@ -1,5 +1,5 @@
 import { db } from '../dexie';
-import { PaymentSchedule, PaymentScheduleSchema } from '../../types/domain';
+import { PaymentSchedule, PaymentScheduleSchema, SyncQueueItem } from '../../types/domain';
 
 export interface RecordPaymentInput {
   scheduleId: string;
@@ -17,15 +17,17 @@ export class PaymentRepository {
 
     await db.transaction('rw', [db.schedules, db.syncQueue], async () => {
       await db.schedules.bulkAdd(validatedList);
-      for (const item of validatedList) {
-        await db.syncQueue.add({
-          table: 'payment_schedules',
-          recordId: item.id,
-          action: 'INSERT',
-          payload: item as unknown as Record<string, unknown>,
-          timestamp: Date.now(),
-        });
-      }
+
+      // Batched sync queue insertion for high performance
+      const syncItems: SyncQueueItem[] = validatedList.map((item) => ({
+        table: 'payment_schedule',
+        recordId: item.id,
+        action: 'INSERT',
+        payload: item as unknown as Record<string, unknown>,
+        timestamp: Date.now(),
+      }));
+
+      await db.syncQueue.bulkAdd(syncItems);
     });
 
     return validatedList;
@@ -42,7 +44,7 @@ export class PaymentRepository {
   }
 
   /**
-   * ATOMIC PAYMENT COLLECTION (Swiss Cheese Layer 3 & Checkpoint)
+   * ATOMIC PAYMENT COLLECTION (Swiss Cheese Layer 3 & Hard Ceiling Block)
    * Records payment on a schedule milestone and adjusts the parent loan balance atomically.
    */
   async recordPayment(input: RecordPaymentInput): Promise<{
@@ -51,7 +53,7 @@ export class PaymentRepository {
   }> {
     const { scheduleId, collectedAmount, notes, paidAt = new Date().toISOString() } = input;
 
-    // Guard Rail: Collected amount cannot be negative
+    // Guard Rail 1: Collected amount cannot be negative
     if (collectedAmount < 0) {
       throw new Error('Collected amount cannot be negative');
     }
@@ -69,7 +71,18 @@ export class PaymentRepository {
         throw new Error(`Parent loan not found for schedule: ${schedule.loanId}`);
       }
 
-      // 3. Determine Payment Status
+      // 3. Swiss Cheese Layer 3: Hard Ceiling Block
+      // Calculate net difference if an amount was already recorded previously
+      const previousAmountPaid = schedule.amountPaid || 0;
+      const netPaymentDelta = collectedAmount - previousAmountPaid;
+
+      if (netPaymentDelta > loan.outstandingBalance) {
+        throw new Error(
+          `Payment of ₹${collectedAmount.toLocaleString('en-IN')} exceeds total loan outstanding balance (₹${loan.outstandingBalance.toLocaleString('en-IN')})`
+        );
+      }
+
+      // 4. Determine Payment Status
       let newStatus: 'paid' | 'partial' | 'missed' = 'paid';
       if (collectedAmount === 0) {
         newStatus = 'missed';
@@ -79,7 +92,7 @@ export class PaymentRepository {
         newStatus = 'paid';
       }
 
-      // 4. Update Schedule Milestone
+      // 5. Update Schedule Milestone
       const updatedSchedule: PaymentSchedule = {
         ...schedule,
         amountPaid: collectedAmount,
@@ -89,17 +102,12 @@ export class PaymentRepository {
         updatedAt: new Date().toISOString(),
       };
 
-      // Validate updated schedule with Zod
       PaymentScheduleSchema.parse(updatedSchedule);
       await db.schedules.put(updatedSchedule);
 
-      // 5. Update Parent Loan Balance
-      // Calculate net difference if an amount was already recorded previously
-      const previousAmountPaid = schedule.amountPaid || 0;
-      const netPaymentDelta = collectedAmount - previousAmountPaid;
-
+      // 6. Update Parent Loan Balance
       const newTotalCollected = loan.totalCollected + netPaymentDelta;
-      const newOutstanding = Math.max(0, loan.outstandingBalance - netPaymentDelta);
+      const newOutstanding = loan.outstandingBalance - netPaymentDelta;
       const isLoanFullyPaid = newOutstanding === 0;
 
       const updatedLoan = {
@@ -113,9 +121,9 @@ export class PaymentRepository {
 
       await db.loans.put(updatedLoan);
 
-      // 6. Record to Sync Queue
+      // 7. Atomic Sync Queue Records (Singular table name matching Supabase DDL)
       await db.syncQueue.add({
-        table: 'payment_schedules',
+        table: 'payment_schedule',
         recordId: updatedSchedule.id,
         action: 'UPDATE',
         payload: updatedSchedule as unknown as Record<string, unknown>,

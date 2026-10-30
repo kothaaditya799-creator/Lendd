@@ -40,3 +40,4 @@ export class LendTrackDatabase extends Dexie {
 
 // Global singleton instance for the app
 export const db = new LendTrackDatabase();
+

@@ -56,3 +56,4 @@ export class LoanRepository {
 }
 
 export const loanRepo = new LoanRepository();
+
