@@ -1,15 +1,17 @@
 import React from 'react';
-import { Cloud, Check, ShieldCheck } from 'lucide-react';
+import { Cloud, Check, ShieldCheck, Settings } from 'lucide-react';
 
 interface TopHeaderProps {
   currentLanguage: 'en' | 'te';
   onToggleLanguage: () => void;
+  onOpenSettings: () => void;
   isOnline?: boolean;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
   currentLanguage,
   onToggleLanguage,
+  onOpenSettings,
   isOnline = true,
 }) => {
   return (
@@ -29,7 +31,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         </div>
       </div>
 
-      {/* Right Controls: Sync status + Language Pill */}
+      {/* Right Controls: Sync status + Language Pill + Settings Button */}
       <div className="flex items-center space-x-2">
         {/* Sync Indicator */}
         <div
@@ -49,16 +51,24 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           )}
         </div>
 
-        {/* Language Switcher Button with generous touch hit target */}
+        {/* Language Switcher Button */}
         <button
           onClick={onToggleLanguage}
           aria-label="Toggle Language"
-          className="flex h-11 min-w-[56px] items-center justify-center rounded-xl bg-brand-800 px-3.5 text-sm font-bold text-brand-100 shadow-sm active:scale-95 transition-transform"
+          className="flex h-10 min-w-[50px] items-center justify-center rounded-xl bg-brand-800 px-3 text-sm font-bold text-brand-100 shadow-sm active:scale-95 transition-transform"
         >
           {currentLanguage === 'te' ? 'EN' : 'తెలుగు'}
+        </button>
+
+        {/* Settings Gear Button (44-56px hit target) */}
+        <button
+          onClick={onOpenSettings}
+          aria-label="Open Settings"
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-800 text-brand-100 shadow-sm hover:bg-brand-900 active:scale-95 transition-transform"
+        >
+          <Settings className="h-5 w-5" />
         </button>
       </div>
     </header>
   );
 };
-

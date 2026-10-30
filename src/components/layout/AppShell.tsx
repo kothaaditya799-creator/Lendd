@@ -9,6 +9,7 @@ interface AppShellProps {
   onSelectTab: (tab: TabType) => void;
   language: 'en' | 'te';
   onToggleLanguage: () => void;
+  onOpenSettings: () => void;
   isOnline?: boolean;
 }
 
@@ -18,6 +19,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   onSelectTab,
   language,
   onToggleLanguage,
+  onOpenSettings,
   isOnline = true,
 }) => {
   return (
@@ -27,6 +29,7 @@ export const AppShell: React.FC<AppShellProps> = ({
         <TopHeader
           currentLanguage={language}
           onToggleLanguage={onToggleLanguage}
+          onOpenSettings={onOpenSettings}
           isOnline={isOnline}
         />
 
@@ -44,4 +47,3 @@ export const AppShell: React.FC<AppShellProps> = ({
     </div>
   );
 };
-

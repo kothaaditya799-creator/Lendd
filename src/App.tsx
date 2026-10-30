@@ -5,11 +5,13 @@ import { CollectionsPage } from './pages/CollectionsPage';
 import { BorrowersPage } from './pages/BorrowersPage';
 import { NewLoanPage } from './pages/NewLoanPage';
 import { InsightsPage } from './pages/InsightsPage';
+import { SettingsModal } from './components/layout/SettingsModal';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('collections');
   const [language, setLanguage] = useState<'en' | 'te'>('en');
   const [preSelectedBorrowerId, setPreSelectedBorrowerId] = useState<string | undefined>(undefined);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const handleToggleLanguage = () => {
     setLanguage((prev) => (prev === 'en' ? 'te' : 'en'));
@@ -52,18 +54,29 @@ export const App: React.FC = () => {
   };
 
   return (
-    <AppShell
-      activeTab={activeTab}
-      onSelectTab={(tab) => {
-        setPreSelectedBorrowerId(undefined);
-        setActiveTab(tab);
-      }}
-      language={language}
-      onToggleLanguage={handleToggleLanguage}
-      isOnline={true}
-    >
-      {renderCurrentView()}
-    </AppShell>
+    <>
+      <AppShell
+        activeTab={activeTab}
+        onSelectTab={(tab) => {
+          setPreSelectedBorrowerId(undefined);
+          setActiveTab(tab);
+        }}
+        language={language}
+        onToggleLanguage={handleToggleLanguage}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        isOnline={true}
+      >
+        {renderCurrentView()}
+      </AppShell>
+
+      {/* Global Settings Sheet */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        language={language}
+        onToggleLanguage={handleToggleLanguage}
+      />
+    </>
   );
 };
 
