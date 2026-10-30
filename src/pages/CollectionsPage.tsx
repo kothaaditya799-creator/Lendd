@@ -18,10 +18,10 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
             {isTe ? 'ఈరోజు సేకరణలు' : "Today's Collections"}
           </span>
         </div>
-        <span className="text-sm font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
+        <span className="text-sm font-semibold text-slate-600 bg-slate-100 px-3 py-1 rounded-full">
           {new Date().toLocaleDateString(isTe ? 'te-IN' : 'en-IN', {
             day: 'numeric',
-            month: 'short',
+            month: isTe ? 'long' : 'short',
             year: 'numeric',
           })}
         </span>

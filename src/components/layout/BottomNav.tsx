@@ -31,7 +31,6 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       labelEn: 'New Loan',
       labelTe: 'కొత్త రుణం',
       icon: PlusCircle,
-      isPrimaryAction: true,
     },
     {
       id: 'insights' as TabType,
@@ -49,38 +48,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           const Icon = tab.icon;
           const label = language === 'te' ? tab.labelTe : tab.labelEn;
 
-          if (tab.isPrimaryAction) {
-            return (
-              <button
-                key={tab.id}
-                onClick={() => onSelectTab(tab.id)}
-                className="group -mt-4 flex flex-col items-center focus:outline-none"
-              >
-                <div
-                  className={`flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-transform active:scale-95 ${
-                    isActive
-                      ? 'bg-brand-800 text-white ring-4 ring-brand-100'
-                      : 'bg-brand-600 text-white group-hover:bg-brand-700'
-                  }`}
-                >
-                  <Icon className="h-7 w-7" />
-                </div>
-                <span
-                  className={`mt-1 text-xs font-semibold ${
-                    isActive ? 'text-brand-700' : 'text-slate-600'
-                  }`}
-                >
-                  {label}
-                </span>
-              </button>
-            );
-          }
-
           return (
             <button
               key={tab.id}
               onClick={() => onSelectTab(tab.id)}
-              className={`flex min-h-[56px] min-w-[64px] flex-1 flex-col items-center justify-center py-1 transition-colors active:scale-95 ${
+              className={`flex min-h-[56px] min-w-[64px] flex-1 flex-col items-center justify-center py-1 transition-all active:scale-95 ${
                 isActive
                   ? 'text-brand-700'
                   : 'text-slate-500 hover:text-slate-800'
@@ -88,7 +60,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             >
               <div className="relative">
                 <Icon
-                  className={`h-6 w-6 transition-transform ${
+                  className={`h-6 w-6 transition-all ${
                     isActive ? 'scale-110 stroke-[2.5]' : 'stroke-2'
                   }`}
                 />
@@ -110,4 +82,3 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     </nav>
   );
 };
-
