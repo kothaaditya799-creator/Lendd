@@ -9,9 +9,20 @@ import { InsightsPage } from './pages/InsightsPage';
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('collections');
   const [language, setLanguage] = useState<'en' | 'te'>('en');
+  const [preSelectedBorrowerId, setPreSelectedBorrowerId] = useState<string | undefined>(undefined);
 
   const handleToggleLanguage = () => {
     setLanguage((prev) => (prev === 'en' ? 'te' : 'en'));
+  };
+
+  const handleNavigateToNewLoan = (borrowerId?: string) => {
+    setPreSelectedBorrowerId(borrowerId);
+    setActiveTab('new-loan');
+  };
+
+  const handleLoanCreatedSuccess = () => {
+    setPreSelectedBorrowerId(undefined);
+    setActiveTab('collections');
   };
 
   const renderCurrentView = () => {
@@ -19,9 +30,20 @@ export const App: React.FC = () => {
       case 'collections':
         return <CollectionsPage language={language} />;
       case 'borrowers':
-        return <BorrowersPage language={language} />;
+        return (
+          <BorrowersPage
+            language={language}
+            onNavigateToNewLoan={handleNavigateToNewLoan}
+          />
+        );
       case 'new-loan':
-        return <NewLoanPage language={language} />;
+        return (
+          <NewLoanPage
+            language={language}
+            preSelectedBorrowerId={preSelectedBorrowerId}
+            onSuccess={handleLoanCreatedSuccess}
+          />
+        );
       case 'insights':
         return <InsightsPage language={language} />;
       default:
@@ -32,7 +54,10 @@ export const App: React.FC = () => {
   return (
     <AppShell
       activeTab={activeTab}
-      onSelectTab={setActiveTab}
+      onSelectTab={(tab) => {
+        setPreSelectedBorrowerId(undefined);
+        setActiveTab(tab);
+      }}
       language={language}
       onToggleLanguage={handleToggleLanguage}
       isOnline={true}
@@ -43,4 +68,3 @@ export const App: React.FC = () => {
 };
 
 export default App;
-

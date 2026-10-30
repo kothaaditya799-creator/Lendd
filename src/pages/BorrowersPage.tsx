@@ -1,27 +1,74 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Search, Phone, ShieldCheck, X } from 'lucide-react';
+import {
+  Users,
+  UserPlus,
+  Search,
+  Phone,
+  ShieldCheck,
+  X,
+  MapPin,
+  PlusCircle,
+  UserCheck,
+} from 'lucide-react';
 import { borrowerRepo } from '../db/repositories/borrowerRepo';
-import { Borrower } from '../types/domain';
+import { loanRepo } from '../db/repositories/loanRepo';
+import { Borrower, Loan } from '../types/domain';
 
 interface BorrowersPageProps {
   language: 'en' | 'te';
+  onNavigateToNewLoan?: (borrowerId?: string) => void;
 }
 
-export const BorrowersPage: React.FC<BorrowersPageProps> = ({ language }) => {
+export const BorrowersPage: React.FC<BorrowersPageProps> = ({
+  language,
+  onNavigateToNewLoan,
+}) => {
   const isTe = language === 'te';
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form State
+  // Add Borrower Modal State
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [guarantorName, setGuarantorName] = useState('');
   const [guarantorPhone, setGuarantorPhone] = useState('');
   const [address, setAddress] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Selected Borrower Details Sheet State
+  const [selectedBorrower, setSelectedBorrower] = useState<Borrower | null>(null);
+  const [borrowerLoans, setBorrowerLoans] = useState<Loan[]>([]);
+  const [isLoadingLoans, setIsLoadingLoans] = useState(false);
+
+  // Reset form and close add modal
+  const handleCloseAddModal = () => {
+    setName('');
+    setPhone('');
+    setGuarantorName('');
+    setGuarantorPhone('');
+    setAddress('');
+    setFormError(null);
+    setIsSubmitting(false);
+    setIsAddModalOpen(false);
+  };
+
+  // Open Borrower Details
+  const handleOpenBorrowerDetails = async (borrower: Borrower) => {
+    setSelectedBorrower(borrower);
+    setIsLoadingLoans(true);
+    try {
+      const loans = await loanRepo.getLoansByBorrower(borrower.id);
+      setBorrowerLoans(loans);
+    } catch (err) {
+      console.error('Error fetching borrower loans:', err);
+      setBorrowerLoans([]);
+    } finally {
+      setIsLoadingLoans(false);
+    }
+  };
 
   // Load borrowers from Dexie.js
   const loadBorrowers = async () => {
@@ -40,23 +87,52 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({ language }) => {
     loadBorrowers();
   }, [searchQuery]);
 
-  // Handle Form Submit with Zod Guard Rails & Double-Tap Prevention
+  // Handle Form Submit with Human-Friendly Errors
   const handleAddBorrower = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSubmitting) return; // Prevent double-tap race
+    if (isSubmitting) return;
 
     setFormError(null);
+
+    // Frontline Pre-checks for human-friendly messages
+    const trimmedName = name.trim();
+    const cleanPhone = phone.replace(/\D/g, '');
+    const cleanGuarantorPhone = guarantorPhone.replace(/\D/g, '') || undefined;
+
+    if (!trimmedName || trimmedName.length < 2) {
+      setFormError(
+        isTe
+          ? 'దయచేసి సరైన పేరు నమోదు చేయండి (కనీసం 2 అక్షరాలు ఉండాలి).'
+          : 'Please enter a valid name (at least 2 letters).'
+      );
+      return;
+    }
+
+    if (!cleanPhone || cleanPhone.length !== 10 || !/^[6-9]/.test(cleanPhone)) {
+      setFormError(
+        isTe
+          ? 'చెల్లని మొబైల్ నంబర్. నంబర్ ఖచ్చితంగా 10 అంకెలు ఉండాలి మరియు 6, 7, 8, లేదా 9 తో ప్రారంభం కావాలి.'
+          : 'Invalid mobile number. It must be exactly 10 digits and start with 6, 7, 8, or 9.'
+      );
+      return;
+    }
+
+    if (cleanGuarantorPhone && (cleanGuarantorPhone.length !== 10 || !/^[6-9]/.test(cleanGuarantorPhone))) {
+      setFormError(
+        isTe
+          ? 'చెల్లని హామీదారు ఫోన్ నంబర్. ఖచ్చితంగా 10 అంకెలు ఉండాలి లేదా ఖాళీగా ఉంచండి.'
+          : 'Invalid guarantor phone number. Must be 10 digits or left blank.'
+      );
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      // Physical sanitization: strip non-digits from phone
-      const cleanPhone = phone.replace(/\D/g, '');
-      const cleanGuarantorPhone = guarantorPhone.replace(/\D/g, '') || undefined;
-
       await borrowerRepo.addBorrower({
         id: crypto.randomUUID(),
         lenderId: 'local-lender',
-        name: name.trim(),
+        name: trimmedName,
         phone: cleanPhone,
         guarantorName: guarantorName.trim() || undefined,
         guarantorPhone: cleanGuarantorPhone,
@@ -68,20 +144,21 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({ language }) => {
         updatedAt: new Date().toISOString(),
       });
 
-      // Reset Form & Close Modal
-      setName('');
-      setPhone('');
-      setGuarantorName('');
-      setGuarantorPhone('');
-      setAddress('');
-      setIsModalOpen(false);
+      handleCloseAddModal();
       await loadBorrowers();
     } catch (err: unknown) {
-      if (err && typeof err === 'object' && 'errors' in err) {
-        const zodErr = err as { errors: Array<{ message: string }> };
-        setFormError(zodErr.errors[0]?.message || 'Invalid input');
+      if (err instanceof Error) {
+        if (err.message.includes('already exists')) {
+          setFormError(
+            isTe
+              ? `ఈ మొబైల్ నంబర్ (+91 ${cleanPhone}) ఇప్పటికే నమోదు చేయబడింది.`
+              : `A borrower with phone +91 ${cleanPhone} already exists.`
+          );
+        } else {
+          setFormError(err.message);
+        }
       } else {
-        setFormError(err instanceof Error ? err.message : 'Failed to save borrower');
+        setFormError(isTe ? 'భద్రపరచడం విఫలమైంది.' : 'Failed to save borrower.');
       }
     } finally {
       setIsSubmitting(false);
@@ -96,7 +173,10 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({ language }) => {
           {isTe ? 'రుణగ్రహీతల జాబితా' : 'Borrower Directory'}
         </h2>
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => {
+            setFormError(null);
+            setIsAddModalOpen(true);
+          }}
           className="flex min-h-[56px] items-center space-x-2 bg-brand-700 hover:bg-brand-800 text-white px-4 py-2 rounded-2xl text-base font-bold shadow-md active:scale-95 transition-all"
         >
           <UserPlus className="h-5 w-5" />
@@ -104,7 +184,7 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({ language }) => {
         </button>
       </div>
 
-      {/* 56px Search Input Bar */}
+      {/* Search Input Bar (56px) */}
       <div className="relative">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
         <input
@@ -140,7 +220,8 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({ language }) => {
           {borrowers.map((borrower) => (
             <div
               key={borrower.id}
-              className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex items-center justify-between"
+              onClick={() => handleOpenBorrowerDetails(borrower)}
+              className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex items-center justify-between cursor-pointer hover:border-brand-400 active:scale-[0.99] transition-all"
             >
               <div className="flex items-center space-x-3.5">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-100 text-brand-800 font-bold text-xl shadow-inner">
@@ -178,8 +259,163 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({ language }) => {
         </div>
       )}
 
-      {/* Add Borrower Modal */}
-      {isModalOpen && (
+      {/* =========================================================================
+          BORROWER DETAILS BOTTOM SHEET
+          ========================================================================= */}
+      {selectedBorrower && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-2xl p-6 shadow-2xl space-y-5 max-h-[92vh] overflow-y-auto">
+            {/* Sheet Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center space-x-3">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-100 text-brand-800 font-bold text-2xl">
+                  {selectedBorrower.name.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-slate-900">
+                    {selectedBorrower.name}
+                  </h3>
+                  <div className="flex items-center space-x-2 mt-0.5">
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
+                      {isTe ? 'క్రియాశీల ఖాతా' : 'Active Account'}
+                    </span>
+                    <span className="text-xs font-semibold text-slate-400">
+                      ★ {selectedBorrower.trustScore.toFixed(1)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setSelectedBorrower(null)}
+                className="flex h-10 w-10 items-center justify-center rounded-full text-slate-400 hover:text-slate-600 active:scale-95"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            {/* Quick Contact & Call Button (56px) */}
+            <div className="space-y-2">
+              <a
+                href={`tel:${selectedBorrower.phone}`}
+                className="flex min-h-[56px] w-full items-center justify-center space-x-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-lg shadow-md active:scale-95 transition-all"
+              >
+                <Phone className="h-5 w-5" />
+                <span>{isTe ? 'కాల్ చేయండి: ' : 'Call: '}+91 {selectedBorrower.phone}</span>
+              </a>
+            </div>
+
+            {/* Details Grid */}
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3">
+              {/* Guarantor Details */}
+              <div className="flex items-start space-x-2.5">
+                <UserCheck className="h-5 w-5 text-brand-700 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    {isTe ? 'హామీదారు / రిఫరెన్స్' : 'Guarantor / Reference'}
+                  </p>
+                  <p className="text-base font-bold text-slate-800">
+                    {selectedBorrower.guarantorName || (isTe ? 'ఎవరూ లేరు' : 'None provided')}
+                  </p>
+                  {selectedBorrower.guarantorPhone && (
+                    <a
+                      href={`tel:${selectedBorrower.guarantorPhone}`}
+                      className="text-sm font-semibold text-brand-700 hover:underline inline-block mt-0.5"
+                    >
+                      +91 {selectedBorrower.guarantorPhone}
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Address */}
+              <div className="flex items-start space-x-2.5 pt-2 border-t border-slate-200/60">
+                <MapPin className="h-5 w-5 text-brand-700 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    {isTe ? 'చిరునామా / ప్రాంతం' : 'Address / Area'}
+                  </p>
+                  <p className="text-sm font-semibold text-slate-800">
+                    {selectedBorrower.address || (isTe ? 'నమోదు చేయలేదు' : 'Not specified')}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Active Loans Section */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-base font-bold text-slate-800">
+                  {isTe ? 'రుణాల వివరాలు' : 'Loan History'}
+                </h4>
+                <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                  {borrowerLoans.length} {isTe ? 'రుణాలు' : 'loans'}
+                </span>
+              </div>
+
+              {isLoadingLoans ? (
+                <p className="text-sm text-slate-400 py-3 text-center">
+                  {isTe ? 'రుణాలు లోడ్ అవుతున్నాయి...' : 'Loading loans...'}
+                </p>
+              ) : borrowerLoans.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center">
+                  <p className="text-sm text-slate-400">
+                    {isTe
+                      ? 'ఈ వ్యక్తికి ప్రస్తుతానికి ఎటువంటి రుణాలు లేవు.'
+                      : 'No active or historical loans for this borrower.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {borrowerLoans.map((loan) => (
+                    <div
+                      key={loan.id}
+                      className="rounded-xl bg-slate-50 p-3 border border-slate-200 flex items-center justify-between"
+                    >
+                      <div>
+                        <span className="text-xs font-bold px-2 py-0.5 rounded bg-brand-100 text-brand-800">
+                          {loan.loanType === 'DF' ? 'Daily Finance' : 'Special (SP)'}
+                        </span>
+                        <p className="text-sm font-semibold text-slate-700 mt-1">
+                          {isTe ? 'అసలు: ' : 'Principal: '}₹{loan.principalAmount.toLocaleString('en-IN')}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-bold text-slate-500 uppercase">
+                          {isTe ? 'బాకీ బ్యాలెన్స్' : 'Outstanding'}
+                        </p>
+                        <p className="text-base font-bold text-slate-900">
+                          ₹{loan.outstandingBalance.toLocaleString('en-IN')}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Action: Give New Loan to this borrower (56px) */}
+            <button
+              onClick={() => {
+                const bId = selectedBorrower.id;
+                setSelectedBorrower(null);
+                if (onNavigateToNewLoan) {
+                  onNavigateToNewLoan(bId);
+                }
+              }}
+              className="flex min-h-[56px] w-full items-center justify-center space-x-2 rounded-2xl bg-brand-700 hover:bg-brand-800 text-white font-bold text-lg shadow-lg active:scale-95 transition-all"
+            >
+              <PlusCircle className="h-5 w-5" />
+              <span>{isTe ? 'ఈ వ్యక్తికి కొత్త రుణం ఇవ్వండి' : 'Give New Loan to This Borrower'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          ADD BORROWER MODAL (WITH FRESH RESET ON EXIT)
+          ========================================================================= */}
+      {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4 backdrop-blur-sm">
           <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-2xl p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
             {/* Modal Header */}
@@ -188,16 +424,16 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({ language }) => {
                 {isTe ? 'కొత్త రుణగ్రహీత వివరాలు' : 'Add New Borrower'}
               </h3>
               <button
-                onClick={() => setIsModalOpen(false)}
-                className="flex h-11 w-11 items-center justify-center rounded-full text-slate-400 hover:text-slate-600 active:scale-95"
+                onClick={handleCloseAddModal}
+                className="flex h-10 w-10 items-center justify-center rounded-full text-slate-400 hover:text-slate-600 active:scale-95"
               >
                 <X className="h-6 w-6" />
               </button>
             </div>
 
-            {/* Error Banner */}
+            {/* Human-Friendly Error Banner */}
             {formError && (
-              <div className="rounded-xl bg-red-50 p-3.5 text-sm font-bold text-red-700 border border-red-200">
+              <div className="rounded-2xl bg-red-50 p-4 text-sm font-bold text-red-700 border border-red-200">
                 ⚠️ {formError}
               </div>
             )}
@@ -244,28 +480,26 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({ language }) => {
               </div>
 
               {/* Guarantor Details (56px each) */}
-              <div className="pt-2 border-t border-slate-100">
-                <p className="text-sm font-bold text-slate-800 mb-2">
+              <div className="pt-2 border-t border-slate-100 space-y-2">
+                <p className="text-sm font-bold text-slate-800 mb-1">
                   {isTe ? 'హామీదారు / రిఫరెన్స్ (ఐచ్ఛికం)' : 'Guarantor / Reference (Optional)'}
                 </p>
-                <div className="space-y-2">
-                  <input
-                    type="text"
-                    value={guarantorName}
-                    onChange={(e) => setGuarantorName(e.target.value)}
-                    placeholder={isTe ? 'హామీదారు పేరు' : 'Guarantor Name'}
-                    className="w-full min-h-[56px] px-4 bg-slate-50 border border-slate-200 rounded-2xl text-base focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  />
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    maxLength={10}
-                    value={guarantorPhone}
-                    onChange={(e) => setGuarantorPhone(e.target.value.replace(/\D/g, ''))}
-                    placeholder={isTe ? 'హామీదారు ఫోన్ నంబర్' : 'Guarantor 10-digit Phone'}
-                    className="w-full min-h-[56px] px-4 bg-slate-50 border border-slate-200 rounded-2xl text-base font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  />
-                </div>
+                <input
+                  type="text"
+                  value={guarantorName}
+                  onChange={(e) => setGuarantorName(e.target.value)}
+                  placeholder={isTe ? 'హామీదారు పేరు' : 'Guarantor Name'}
+                  className="w-full min-h-[56px] px-4 bg-slate-50 border border-slate-200 rounded-2xl text-base focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={10}
+                  value={guarantorPhone}
+                  onChange={(e) => setGuarantorPhone(e.target.value.replace(/\D/g, ''))}
+                  placeholder={isTe ? 'హామీదారు 10-అంకెల ఫోన్ నంబర్' : 'Guarantor 10-digit Phone'}
+                  className="w-full min-h-[56px] px-4 bg-slate-50 border border-slate-200 rounded-2xl text-base font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
               </div>
 
               {/* Address (Optional) */}
@@ -282,7 +516,7 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({ language }) => {
                 />
               </div>
 
-              {/* Submit Button (56px with isSubmitting state) */}
+              {/* Submit Button (56px with isSubmitting double-tap shield) */}
               <button
                 type="submit"
                 disabled={isSubmitting}
