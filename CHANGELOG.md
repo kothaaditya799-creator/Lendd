@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Phase 2: Local Database Engine, Types & Guard Rails] - 2026-10-30
+### Added
+- Dexie.js (IndexedDB) database configuration with versioned tables: `borrowers`, `loans`, `schedules`, and `syncQueue`.
+- Strict Zod runtime validation schemas for Indian 10-digit mobile phones (`^[6-9]\d{9}$`), positive integer currency (₹1 to ₹50,00,000 ceiling, no paise), and 4-digit numeric PIN.
+- Storage persistence layer invoking `navigator.storage.persist()` on application boot to prevent OS storage eviction.
+- Repository layer with multi-table atomic transactions (`borrowerRepo`, `loanRepo`, `paymentRepo`).
+- Duplicate phone number guard rail in `borrowerRepo.addBorrower()`.
+- Interactive Add Borrower modal on `BorrowersPage` with real-time Zod validation errors, numeric dialpad constraints (`inputMode="numeric"`), and live Dexie persistence.
+- Automated unit test suite (`src/tests/phase2Verification.ts`) verifying 15 guard rail test cases with 100% pass rate.
+
+### Verified
+- `tsc --noEmit && vite build` passed with 0 errors.
+- Independent Senior Code Reviewer Subagent (`phase-code-reviewer`) audited the phase and issued formal **APPROVED** sign-off.
+
+---
+
 ## [Phase 1: Scaffolding, Deep Teal Design Tokens & Mobile Shell] - 2026-10-30
 ### Added
 - Git repository initialized with strict `.gitignore`.
