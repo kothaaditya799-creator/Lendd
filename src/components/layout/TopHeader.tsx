@@ -49,11 +49,11 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           )}
         </div>
 
-        {/* Language Switcher Button */}
+        {/* Language Switcher Button with generous touch hit target */}
         <button
           onClick={onToggleLanguage}
           aria-label="Toggle Language"
-          className="flex h-9 items-center rounded-lg bg-brand-800 px-3 text-sm font-semibold text-brand-100 active:scale-95 transition-transform"
+          className="flex h-11 min-w-[56px] items-center justify-center rounded-xl bg-brand-800 px-3.5 text-sm font-bold text-brand-100 shadow-sm active:scale-95 transition-transform"
         >
           {currentLanguage === 'te' ? 'EN' : 'తెలుగు'}
         </button>
