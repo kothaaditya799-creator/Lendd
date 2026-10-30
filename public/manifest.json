@@ -1,0 +1,18 @@
+{
+  "short_name": "LendTrack",
+  "name": "LendTrack - లేండ్‌ట్రాక్",
+  "description": "Smart, offline-first lending management for daily and monthly financiers",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/svg+xml"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0F766E",
+  "theme_color": "#0F766E",
+  "display": "standalone",
+  "orientation": "portrait"
+}
+
