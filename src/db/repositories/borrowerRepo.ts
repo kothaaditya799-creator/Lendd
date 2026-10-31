@@ -83,6 +83,48 @@ export class BorrowerRepository {
   }
 
   /**
+   * ATOMIC DELETE BORROWER (WITH ACTIVE DEBT SHIELD)
+   * Strictly blocks deletion if the borrower has active loans with money outstanding.
+   */
+  async deleteBorrower(id: string): Promise<void> {
+    // 1. Check for active loans with unpaid balance
+    const activeLoans = await db.loans
+      .where('borrowerId')
+      .equals(id)
+      .filter((l) => l.status === 'active' && l.outstandingBalance > 0)
+      .toArray();
+
+    if (activeLoans.length > 0) {
+      const totalOwing = activeLoans.reduce((sum, l) => sum + l.outstandingBalance, 0);
+      throw new Error(
+        `Cannot delete borrower with active debt. This borrower owes ₹${totalOwing.toLocaleString('en-IN')}. Please close the active loans first.`
+      );
+    }
+
+    // 2. Atomic soft-delete or cleanup
+    await db.transaction('rw', [db.borrowers, db.loans, db.schedules, db.syncQueue], async () => {
+      // Soft-delete by setting isActive to false (preserves ledger integrity)
+      const existing = await db.borrowers.get(id);
+      if (!existing) return;
+
+      const deactivated: Borrower = {
+        ...existing,
+        isActive: false,
+        updatedAt: new Date().toISOString(),
+      };
+
+      await db.borrowers.put(deactivated);
+      await db.syncQueue.add({
+        table: 'borrowers',
+        recordId: id,
+        action: 'UPDATE',
+        payload: deactivated as unknown as Record<string, unknown>,
+        timestamp: Date.now(),
+      });
+    });
+  }
+
+  /**
    * Get all active borrowers.
    */
   async getActiveBorrowers(): Promise<Borrower[]> {

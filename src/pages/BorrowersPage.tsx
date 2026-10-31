@@ -9,6 +9,9 @@ import {
   MapPin,
   PlusCircle,
   UserCheck,
+  Edit3,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import { borrowerRepo } from '../db/repositories/borrowerRepo';
 import { loanRepo } from '../db/repositories/loanRepo';
@@ -44,6 +47,22 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
   const [borrowerLoans, setBorrowerLoans] = useState<Loan[]>([]);
   const [isLoadingLoans, setIsLoadingLoans] = useState(false);
 
+  // Edit Borrower Modal State
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editGuarantorName, setEditGuarantorName] = useState('');
+  const [editGuarantorPhone, setEditGuarantorPhone] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [editFormError, setEditFormError] = useState<string | null>(null);
+  const [isConfirmingEdit, setIsConfirmingEdit] = useState(false);
+
+  // Delete Borrower Modal State (2-Step Safety Gate)
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteCountdown, setDeleteCountdown] = useState<number>(5);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Reset form and close add modal
   const handleCloseAddModal = () => {
     setName('');
@@ -71,6 +90,128 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
     }
   };
 
+  // Start Edit Mode
+  const handleStartEdit = () => {
+    if (!selectedBorrower) return;
+    setEditName(selectedBorrower.name);
+    setEditPhone(selectedBorrower.phone);
+    setEditGuarantorName(selectedBorrower.guarantorName || '');
+    setEditGuarantorPhone(selectedBorrower.guarantorPhone || '');
+    setEditAddress(selectedBorrower.address || '');
+    setEditFormError(null);
+    setIsConfirmingEdit(false);
+    setIsEditModalOpen(true);
+  };
+
+  // Start Delete Flow
+  const handleStartDelete = () => {
+    if (!selectedBorrower) return;
+
+    // Active Debt Shield Check
+    const activeDebt = borrowerLoans
+      .filter((l) => l.status === 'active' && l.outstandingBalance > 0)
+      .reduce((sum, l) => sum + l.outstandingBalance, 0);
+
+    if (activeDebt > 0) {
+      setDeleteError(
+        isTe
+          ? `ఈ వ్యక్తికి ఇంకా ₹${activeDebt.toLocaleString('en-IN')} బాకీ ఉంది. బాకీ ఉన్నప్పుడు తొలగించలేరు. ముందుగా రుణాన్ని క్లోజ్ చేయండి.`
+          : `Cannot delete borrower with active debt. ${selectedBorrower.name} still owes ₹${activeDebt.toLocaleString('en-IN')}. Please close the loan first.`
+      );
+    } else {
+      setDeleteError(null);
+    }
+
+    setDeleteCountdown(5);
+    setIsDeleteModalOpen(true);
+  };
+
+  // 5-Second Countdown Timer for Nuclear Delete Gate
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    if (isDeleteModalOpen && !deleteError && deleteCountdown > 0) {
+      timer = setTimeout(() => {
+        setDeleteCountdown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [isDeleteModalOpen, deleteError, deleteCountdown]);
+
+  // Execute Deletion
+  const handleConfirmDelete = async () => {
+    if (!selectedBorrower || isDeleting) return;
+    setIsDeleting(true);
+
+    try {
+      await borrowerRepo.deleteBorrower(selectedBorrower.id);
+      setIsDeleteModalOpen(false);
+      setSelectedBorrower(null);
+      await loadBorrowers();
+    } catch (err: unknown) {
+      setDeleteError(err instanceof Error ? err.message : 'Deletion failed');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Save Edit Changes
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedBorrower) return;
+
+    setEditFormError(null);
+
+    const trimmedName = editName.trim();
+    const cleanPhone = editPhone.replace(/\D/g, '');
+    const cleanGuarantorPhone = editGuarantorPhone.replace(/\D/g, '') || undefined;
+
+    if (!trimmedName || trimmedName.length < 2) {
+      setEditFormError(
+        isTe
+          ? 'దయచేసి సరైన పేరు నమోదు చేయండి (కనీసం 2 అక్షరాలు).'
+          : 'Please enter a valid name (at least 2 letters).'
+      );
+      return;
+    }
+
+    if (!cleanPhone || cleanPhone.length !== 10 || !/^[6-9]/.test(cleanPhone)) {
+      setEditFormError(
+        isTe
+          ? 'చెల్లని మొబైల్ నంబర్. 10 అంకెలు ఉండాలి మరియు 6-9 తో ప్రారంభం కావాలి.'
+          : 'Invalid mobile number. Must be 10 digits starting with 6-9.'
+      );
+      return;
+    }
+
+    if (!isConfirmingEdit) {
+      // Step 1: Prompt for confirmation
+      setIsConfirmingEdit(true);
+      return;
+    }
+
+    // Step 2: Execute Update
+    setIsSubmitting(true);
+    try {
+      const updated = await borrowerRepo.updateBorrower(selectedBorrower.id, {
+        name: trimmedName,
+        phone: cleanPhone,
+        guarantorName: editGuarantorName.trim() || undefined,
+        guarantorPhone: cleanGuarantorPhone,
+        address: editAddress.trim() || undefined,
+      });
+
+      setSelectedBorrower(updated);
+      setIsEditModalOpen(false);
+      setIsConfirmingEdit(false);
+      await loadBorrowers();
+    } catch (err: unknown) {
+      setEditFormError(err instanceof Error ? err.message : 'Update failed');
+      setIsConfirmingEdit(false);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Load borrowers from Dexie.js
   const loadBorrowers = async () => {
     setIsLoading(true);
@@ -88,14 +229,13 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
     loadBorrowers();
   }, [searchQuery]);
 
-  // Handle Form Submit with Human-Friendly Errors
+  // Handle Form Submit for New Borrower
   const handleAddBorrower = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
 
     setFormError(null);
 
-    // Frontline Pre-checks for human-friendly messages
     const trimmedName = name.trim();
     const cleanPhone = phone.replace(/\D/g, '');
     const cleanGuarantorPhone = guarantorPhone.replace(/\D/g, '') || undefined;
@@ -114,15 +254,6 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
         isTe
           ? 'చెల్లని మొబైల్ నంబర్. నంబర్ ఖచ్చితంగా 10 అంకెలు ఉండాలి మరియు 6, 7, 8, లేదా 9 తో ప్రారంభం కావాలి.'
           : 'Invalid mobile number. It must be exactly 10 digits and start with 6, 7, 8, or 9.'
-      );
-      return;
-    }
-
-    if (cleanGuarantorPhone && (cleanGuarantorPhone.length !== 10 || !/^[6-9]/.test(cleanGuarantorPhone))) {
-      setFormError(
-        isTe
-          ? 'చెల్లని హామీదారు ఫోన్ నంబర్. ఖచ్చితంగా 10 అంకెలు ఉండాలి లేదా ఖాళీగా ఉంచండి.'
-          : 'Invalid guarantor phone number. Must be 10 digits or left blank.'
       );
       return;
     }
@@ -261,7 +392,7 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
       )}
 
       {/* =========================================================================
-          BORROWER DETAILS BOTTOM SHEET
+          BORROWER DETAILS BOTTOM SHEET (WITH EDIT & DELETE ACTIONS)
           ========================================================================= */}
       {selectedBorrower && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4 backdrop-blur-sm">
@@ -295,16 +426,33 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
               </button>
             </div>
 
-            {/* Quick Contact & Call Button (56px) */}
-            <div className="space-y-2">
-              <a
-                href={`tel:${selectedBorrower.phone}`}
-                className="flex min-h-[56px] w-full items-center justify-center space-x-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-lg shadow-md active:scale-95 transition-all"
+            {/* Quick Actions Row: Edit & Delete Buttons */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={handleStartEdit}
+                className="flex min-h-[48px] items-center justify-center space-x-1.5 rounded-xl border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold text-sm active:scale-95 transition-all"
               >
-                <Phone className="h-5 w-5" />
-                <span>{isTe ? 'కాల్ చేయండి: ' : 'Call: '}+91 {selectedBorrower.phone}</span>
-              </a>
+                <Edit3 className="h-4 w-4 text-brand-700" />
+                <span>{isTe ? 'సవరించు (Edit)' : 'Edit Details'}</span>
+              </button>
+
+              <button
+                onClick={handleStartDelete}
+                className="flex min-h-[48px] items-center justify-center space-x-1.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 font-bold text-sm active:scale-95 transition-all"
+              >
+                <Trash2 className="h-4 w-4 text-red-600" />
+                <span>{isTe ? 'తొలగించు (Delete)' : 'Delete Borrower'}</span>
+              </button>
             </div>
+
+            {/* Direct Call Button (56px) */}
+            <a
+              href={`tel:${selectedBorrower.phone}`}
+              className="flex min-h-[56px] w-full items-center justify-center space-x-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-lg shadow-md active:scale-95 transition-all"
+            >
+              <Phone className="h-5 w-5" />
+              <span>{isTe ? 'కాల్ చేయండి: ' : 'Call: '}+91 {selectedBorrower.phone}</span>
+            </a>
 
             {/* Details Grid */}
             <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3">
@@ -409,6 +557,257 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
               <PlusCircle className="h-5 w-5" />
               <span>{isTe ? 'ఈ వ్యక్తికి కొత్త రుణం ఇవ్వండి' : 'Give New Loan to This Borrower'}</span>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          EDIT BORROWER MODAL (WITH CONFIRMATION BARRIER)
+          ========================================================================= */}
+      {isEditModalOpen && selectedBorrower && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-2xl p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-xl font-bold text-slate-900 flex items-center space-x-2">
+                <Edit3 className="h-5 w-5 text-brand-700" />
+                <span>{isTe ? 'వివరాలను సవరించండి' : 'Edit Borrower Details'}</span>
+              </h3>
+              <button
+                onClick={() => {
+                  setIsEditModalOpen(false);
+                  setIsConfirmingEdit(false);
+                }}
+                className="flex h-10 w-10 items-center justify-center rounded-full text-slate-400 hover:text-slate-600 active:scale-95"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            {/* Error Banner */}
+            {editFormError && (
+              <div className="rounded-2xl bg-red-50 p-4 text-sm font-bold text-red-700 border border-red-200">
+                ⚠️ {editFormError}
+              </div>
+            )}
+
+            {/* Confirmation Banner if in confirm step */}
+            {isConfirmingEdit && (
+              <div className="rounded-2xl bg-amber-50 p-4 text-sm font-bold text-amber-900 border border-amber-200 flex items-start space-x-2">
+                <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <p>{isTe ? 'మార్పులను నిర్ధారించండి:' : 'Confirm Updates:'}</p>
+                  <p className="text-xs font-normal text-amber-800 mt-1">
+                    {isTe
+                      ? `మీరు ${selectedBorrower.name} వివరాలను అప్‌డేట్ చేయాలనుకుంటున్నారా?`
+                      : `Are you sure you want to save changes for ${selectedBorrower.name}?`}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveEdit} className="space-y-4">
+              {/* Name Field (56px) */}
+              <div>
+                <label className="block text-sm font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  {isTe ? 'పూర్తి పేరు *' : 'Full Name *'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => {
+                    setEditName(e.target.value);
+                    setIsConfirmingEdit(false);
+                  }}
+                  className="w-full min-h-[56px] px-4 bg-slate-50 border border-slate-200 rounded-2xl text-base focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+
+              {/* Phone Field (56px) */}
+              <div>
+                <label className="block text-sm font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  {isTe ? 'మొబైల్ నంబర్ (10 అంకెలు) *' : 'Mobile Number (10 Digits) *'}
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base font-bold text-slate-400">
+                    +91
+                  </span>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    required
+                    maxLength={10}
+                    value={editPhone}
+                    onChange={(e) => {
+                      setEditPhone(e.target.value.replace(/\D/g, ''));
+                      setIsConfirmingEdit(false);
+                    }}
+                    className="w-full min-h-[56px] pl-16 pr-4 bg-slate-50 border border-slate-200 rounded-2xl text-lg font-bold tracking-wider focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+              </div>
+
+              {/* Guarantor Details */}
+              <div className="pt-2 border-t border-slate-100 space-y-2">
+                <p className="text-sm font-bold text-slate-800 mb-1">
+                  {isTe ? 'హామీదారు / రిఫరెన్స్ (ఐచ్ఛికం)' : 'Guarantor / Reference (Optional)'}
+                </p>
+                <input
+                  type="text"
+                  value={editGuarantorName}
+                  onChange={(e) => {
+                    setEditGuarantorName(e.target.value);
+                    setIsConfirmingEdit(false);
+                  }}
+                  placeholder={isTe ? 'హామీదారు పేరు' : 'Guarantor Name'}
+                  className="w-full min-h-[56px] px-4 bg-slate-50 border border-slate-200 rounded-2xl text-base focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={10}
+                  value={editGuarantorPhone}
+                  onChange={(e) => {
+                    setEditGuarantorPhone(e.target.value.replace(/\D/g, ''));
+                    setIsConfirmingEdit(false);
+                  }}
+                  placeholder={isTe ? 'హామీదారు 10-అంకెల ఫోన్ నంబర్' : 'Guarantor 10-digit Phone'}
+                  className="w-full min-h-[56px] px-4 bg-slate-50 border border-slate-200 rounded-2xl text-base font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+
+              {/* Address */}
+              <div>
+                <label className="block text-sm font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  {isTe ? 'చిరునామా / ల్యాండ్‌మార్క్ (ఐచ్ఛికం)' : 'Address / Landmark (Optional)'}
+                </label>
+                <textarea
+                  rows={2}
+                  value={editAddress}
+                  onChange={(e) => {
+                    setEditAddress(e.target.value);
+                    setIsConfirmingEdit(false);
+                  }}
+                  className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-base focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+
+              {/* Submit / Confirm Button */}
+              <div className="flex space-x-2">
+                {isConfirmingEdit && (
+                  <button
+                    type="button"
+                    onClick={() => setIsConfirmingEdit(false)}
+                    className="flex-1 min-h-[56px] rounded-2xl border border-slate-300 bg-slate-100 font-bold text-slate-700"
+                  >
+                    {isTe ? 'రద్దు' : 'Cancel'}
+                  </button>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className={`flex-1 min-h-[56px] rounded-2xl font-bold text-lg shadow-lg active:scale-95 transition-all text-white ${
+                    isConfirmingEdit ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-brand-700 hover:bg-brand-800'
+                  }`}
+                >
+                  {isSubmitting
+                    ? isTe ? 'సేవ్ చేస్తోంది...' : 'Saving...'
+                    : isConfirmingEdit
+                    ? isTe ? '✓ అవును, నిర్ధారించు' : '✓ Confirm Update'
+                    : isTe ? 'మార్పులను సేవ్ చేయి' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          DELETE BORROWER MODAL (2-STEP GATE + ACTIVE DEBT SHIELD)
+          ========================================================================= */}
+      {isDeleteModalOpen && selectedBorrower && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-2xl p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-red-100 pb-3">
+              <h3 className="text-xl font-bold text-red-700 flex items-center space-x-2">
+                <Trash2 className="h-6 w-6 text-red-600" />
+                <span>{isTe ? 'రుణగ్రహీతను తొలగించండి' : 'Delete Borrower'}</span>
+              </h3>
+              <button
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="flex h-10 w-10 items-center justify-center rounded-full text-slate-400 hover:text-slate-600 active:scale-95"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            {/* CASE 1: ACTIVE DEBT SHIELD TRIGGERED (HARD BLOCK) */}
+            {deleteError ? (
+              <div className="space-y-4">
+                <div className="rounded-2xl bg-red-50 p-4 border border-red-200 space-y-2">
+                  <div className="flex items-center space-x-2 text-red-800 font-bold">
+                    <AlertTriangle className="h-5 w-5 text-red-600 shrink-0" />
+                    <span>{isTe ? 'తొలగించడం సాధ్యం కాదు (బాకీ ఉంది)' : 'Deletion Blocked (Active Debt)'}</span>
+                  </div>
+                  <p className="text-sm text-red-700 leading-relaxed">
+                    {deleteError}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="w-full min-h-[56px] rounded-2xl bg-slate-800 text-white font-bold text-base shadow-md active:scale-95"
+                >
+                  {isTe ? 'సరే, అర్థమైంది' : 'Understood'}
+                </button>
+              </div>
+            ) : (
+              /* CASE 2: NO DEBT -> 2-STEP NUCLEAR GATE WITH 5-SECOND COUNTDOWN */
+              <div className="space-y-4">
+                <div className="rounded-2xl bg-red-50 p-4 border border-red-200 space-y-2">
+                  <div className="flex items-center space-x-2 text-red-800 font-bold">
+                    <AlertTriangle className="h-5 w-5 text-red-600 shrink-0" />
+                    <span>{isTe ? 'హెచ్చరిక: డేటా తొలగించబడుతుంది' : 'Warning: Irreversible Action'}</span>
+                  </div>
+                  <p className="text-sm text-red-800 leading-relaxed">
+                    {isTe
+                      ? `మీరు నిజంగా "${selectedBorrower.name}" ను తొలగించాలనుకుంటున్నారా? ఈ వ్యక్తి రికార్డులు ఇకపై డైరెక్టరీలో కనిపించవు.`
+                      : `Are you sure you want to permanently delete "${selectedBorrower.name}"? This record will be deactivated and removed from your active directory.`}
+                  </p>
+                </div>
+
+                <div className="flex space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsDeleteModalOpen(false)}
+                    className="flex-1 min-h-[56px] rounded-2xl border border-slate-300 bg-slate-100 font-bold text-slate-700 active:scale-95"
+                  >
+                    {isTe ? 'రద్దు' : 'Cancel'}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={deleteCountdown > 0 || isDeleting}
+                    onClick={handleConfirmDelete}
+                    className={`flex-1 min-h-[56px] rounded-2xl font-bold text-base shadow-lg transition-all text-white ${
+                      deleteCountdown > 0
+                        ? 'bg-red-300 cursor-not-allowed'
+                        : 'bg-red-600 hover:bg-red-700 active:scale-95'
+                    }`}
+                  >
+                    {isDeleting
+                      ? isTe ? 'తొలగిస్తోంది...' : 'Deleting...'
+                      : deleteCountdown > 0
+                      ? isTe ? `వేచి ఉండండి (${deleteCountdown}s)...` : `Wait (${deleteCountdown}s)...`
+                      : isTe ? '🗑️ అవును, తొలగించు' : '🗑️ Confirm Delete'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
