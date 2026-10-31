@@ -44,6 +44,16 @@ export class PaymentRepository {
   }
 
   /**
+   * Get all schedule milestones for a specific loan sorted chronologically by due date.
+   */
+  async getSchedulesByLoan(loanId: string): Promise<PaymentSchedule[]> {
+    return await db.schedules
+      .where('loanId')
+      .equals(loanId)
+      .sortBy('dueDate');
+  }
+
+  /**
    * ATOMIC PAYMENT COLLECTION (Swiss Cheese Layer 3 & Hard Ceiling Block)
    * Records payment on a schedule milestone and adjusts the parent loan balance atomically.
    */

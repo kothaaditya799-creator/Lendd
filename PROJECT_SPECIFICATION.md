@@ -116,6 +116,12 @@ To completely prevent accidental "fat-finger" errors, extra zero inputs, and cor
   * Net Cash Position: $\text{Net Cash} = \text{Collections} - \text{Disbursements}$.
   * Headcount: Total visited, fully paid, partial, missed.
 
+#### Case D: Archived / Deleted Borrowers & 1-Tap Restoration (Soft-Delete Ledger)
+* **Pre-condition**: Borrowers can only be deleted if they have zero active debt (`outstandingBalance === 0`).
+* **Storage Model**: Soft delete (`isActive: false`). No loan or schedule history is ever purged.
+* **UI Directory**: `[ Active (N) ]` | `[ Archived / Deleted (N) ]` segmented toggle on Borrowers directory.
+* **1-Tap Restore**: Tapping "Restore" (పునరుద్ధరించు) immediately reactivates `isActive: true` with 100% past loan records and KYC details intact. Zero re-entry friction for returning borrowers.
+
 ---
 
 ## 5. Security & Authentication Architecture

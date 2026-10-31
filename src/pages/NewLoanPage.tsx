@@ -4,13 +4,15 @@ import {
   Calendar,
   CheckCircle2,
   ArrowRight,
+  Eye,
 } from 'lucide-react';
 import { borrowerRepo } from '../db/repositories/borrowerRepo';
 import { loanRepo } from '../db/repositories/loanRepo';
 import { paymentRepo } from '../db/repositories/paymentRepo';
-import { Borrower } from '../types/domain';
+import { Borrower, PaymentSchedule } from '../types/domain';
 import { generateDFSchedule, generateSPSchedule, formatDateToISO } from '../utils/loanCalculator';
 import { generateUUID } from '../utils/uuid';
+import { ScheduleInspectorModal } from '../components/loans/ScheduleInspectorModal';
 
 interface NewLoanPageProps {
   language: 'en' | 'te';
@@ -48,6 +50,46 @@ export const NewLoanPage: React.FC<NewLoanPageProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Schedule Inspector / Preview State
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewSchedules, setPreviewSchedules] = useState<PaymentSchedule[]>([]);
+  const [previewEndDate, setPreviewEndDate] = useState<string>('');
+  const [previewDaysCount, setPreviewDaysCount] = useState<number>(0);
+  const [previewSundaysSkipped, setPreviewSundaysSkipped] = useState<number>(0);
+
+  const handleOpenPreview = () => {
+    if (loanType === 'DF') {
+      const res = generateDFSchedule({
+        loanId: 'preview-loan',
+        borrowerId: selectedBorrowerId || 'preview-borrower',
+        totalRepayment,
+        installments,
+        frequency,
+        startDateStr: startDate,
+        skipSundays,
+      });
+      setPreviewSchedules(res.schedules);
+      setPreviewEndDate(res.endDate);
+      setPreviewDaysCount(res.totalCalendarDays);
+      setPreviewSundaysSkipped(res.sundaysSkippedCount);
+    } else {
+      const res = generateSPSchedule({
+        loanId: 'preview-loan',
+        borrowerId: selectedBorrowerId || 'preview-borrower',
+        principal,
+        monthlyInterestRate,
+        frequency: 'monthly',
+        cycles: interestCycles,
+        startDateStr: startDate,
+      });
+      setPreviewSchedules(res.schedules);
+      setPreviewEndDate(res.endDate);
+      setPreviewDaysCount(interestCycles * 30);
+      setPreviewSundaysSkipped(0);
+    }
+    setIsPreviewOpen(true);
+  };
 
   // Load borrowers on mount
   useEffect(() => {
@@ -538,6 +580,20 @@ export const NewLoanPage: React.FC<NewLoanPageProps> = ({
           </div>
         )}
 
+        {/* Milestone Schedule Inspector Trigger Button (56px) */}
+        <button
+          type="button"
+          onClick={handleOpenPreview}
+          className="w-full min-h-[56px] rounded-2xl bg-teal-50 hover:bg-teal-100 active:bg-teal-200 border-2 border-teal-600 text-teal-900 font-bold text-base shadow-sm transition-all flex items-center justify-center space-x-2"
+        >
+          <Eye className="h-5 w-5 text-teal-700" />
+          <span>
+            {isTe
+              ? `వాయిదాల షెడ్యూల్ పరిశీలించండి (${loanType === 'DF' ? `${installments} రోజులు` : `${interestCycles} నెలలు`})`
+              : `Inspect Schedule (${loanType === 'DF' ? `${installments} Days` : `${interestCycles} Months`})`}
+          </span>
+        </button>
+
         {/* Submit Button (56px) */}
         <button
           type="submit"
@@ -554,6 +610,22 @@ export const NewLoanPage: React.FC<NewLoanPageProps> = ({
           )}
         </button>
       </form>
+
+      {/* Schedule Inspector Modal */}
+      <ScheduleInspectorModal
+        isOpen={isPreviewOpen}
+        onClose={() => setIsPreviewOpen(false)}
+        isTe={isTe}
+        loanType={loanType}
+        schedules={previewSchedules}
+        principalAmount={principal}
+        totalAmount={loanType === 'DF' ? totalRepayment : principal}
+        startDate={startDate}
+        endDate={previewEndDate}
+        skipSundays={loanType === 'DF' && skipSundays}
+        totalCalendarDays={previewDaysCount}
+        sundaysSkippedCount={previewSundaysSkipped}
+      />
     </div>
   );
 };

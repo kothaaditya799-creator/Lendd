@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Phase 3: Loan Engine & Schedule Generation Math (DF / SP Math)] - 2026-10-31
+### Added
+- **Financial Calendar Mathematics (`src/utils/dateUtils.ts`)**:
+  - Pure timezone-safe date parsing, formatting, and day-of-week detection.
+  - Leap year detection (`isLeapYear`) and days-in-month table (`getDaysInMonth`).
+  - Safe month addition (`addMonthsPreservingDay`) preventing rollover bugs (e.g. Jan 31 + 1 month in 2024 leap year clamps to Feb 29, in 2025 clamps to Feb 28, in 2 months restores to Mar 31).
+- **Daily Finance (DF) Schedule Engine (`src/utils/loanCalculator.ts`)**:
+  - Whole-rupee rounding reconciliation distributing fractional remainders into the final installment with zero lost rupees.
+  - Sunday exclusion toggle: Automatically advances start dates if Sunday, skips Sundays from daily installment dates, while preserving total required installment milestones.
+  - Duration calculation computing calendar elapsed days and total Sundays skipped.
+- **Special Interest (SP) Schedule Engine**:
+  - Simple / flat interest calculation (monthly and quarterly cycles).
+  - Milestone generation for interest cycles plus final principal return milestone at maturity.
+- **Early Settlement / Payoff Engine (`calculateEarlyPayoff`)**:
+  - DF early payoff: Unearned interest calculation and customizable goodwill/pre-closure discount (0%, 5%, 10%, 15%).
+  - SP early payoff: Principal balance + accumulated unpaid interest + pro-rated daily cycle interest calculation.
+- **UI Components & Integrations**:
+  - Indian Rupee currency formatting (`src/utils/currency.ts`).
+  - Interactive Milestone Schedule Inspector Modal (`ScheduleInspectorModal.tsx`) with dual tabs: full scrollable schedule breakdown and interactive Early Payoff Calculator.
+  - Added "Inspect Schedule" button before loan creation on `NewLoanPage.tsx`.
+  - Added "View Milestones & Early Payoff" action on individual loan cards in `BorrowersPage.tsx`.
+  - Added `paymentRepo.getSchedulesByLoan()` IndexedDB query.
+- **Automated Verification**:
+  - 33/33 unit tests passing in `src/tests/phase3Verification.ts` and `src/tests/runPhase3Cli.mjs`.
+
+### Verified
+- `tsc && vite build` built with 0 errors.
+- Independent Senior Code Reviewer Subagent (`phase-code-reviewer`) audited the phase and issued formal **APPROVED** sign-off.
+
+---
+
 ## [Phase 2: Local Database Engine, Types & Guard Rails] - 2026-10-30
 ### Added
 - Dexie.js (IndexedDB) database configuration with versioned tables: `borrowers`, `loans`, `schedules`, and `syncQueue`.

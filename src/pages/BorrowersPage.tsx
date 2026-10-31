@@ -12,11 +12,14 @@ import {
   Edit3,
   Trash2,
   AlertTriangle,
+  Calendar,
 } from 'lucide-react';
 import { borrowerRepo } from '../db/repositories/borrowerRepo';
 import { loanRepo } from '../db/repositories/loanRepo';
-import { Borrower, Loan } from '../types/domain';
+import { paymentRepo } from '../db/repositories/paymentRepo';
+import { Borrower, Loan, PaymentSchedule } from '../types/domain';
 import { generateUUID } from '../utils/uuid';
+import { ScheduleInspectorModal } from '../components/loans/ScheduleInspectorModal';
 
 interface BorrowersPageProps {
   language: 'en' | 'te';
@@ -87,6 +90,26 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
       setBorrowerLoans([]);
     } finally {
       setIsLoadingLoans(false);
+    }
+  };
+
+  // Schedule Inspector State for Existing Loans
+  const [selectedLoanForInspector, setSelectedLoanForInspector] = useState<Loan | null>(null);
+  const [inspectorSchedules, setInspectorSchedules] = useState<PaymentSchedule[]>([]);
+  const [isInspectorOpen, setIsInspectorOpen] = useState(false);
+  const [isLoadingInspector, setIsLoadingInspector] = useState(false);
+
+  const handleInspectLoan = async (loan: Loan) => {
+    setIsLoadingInspector(true);
+    try {
+      const schedules = await paymentRepo.getSchedulesByLoan(loan.id);
+      setSelectedLoanForInspector(loan);
+      setInspectorSchedules(schedules);
+      setIsInspectorOpen(true);
+    } catch (err) {
+      console.error('Failed to load loan schedules:', err);
+    } finally {
+      setIsLoadingInspector(false);
     }
   };
 
@@ -519,24 +542,37 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
                   {borrowerLoans.map((loan) => (
                     <div
                       key={loan.id}
-                      className="rounded-xl bg-slate-50 p-3 border border-slate-200 flex items-center justify-between"
+                      className="rounded-xl bg-slate-50 p-3 border border-slate-200 flex flex-col gap-2"
                     >
-                      <div>
-                        <span className="text-xs font-bold px-2 py-0.5 rounded bg-brand-100 text-brand-800">
-                          {loan.loanType === 'DF' ? 'Daily Finance' : 'Special (SP)'}
-                        </span>
-                        <p className="text-sm font-semibold text-slate-700 mt-1">
-                          {isTe ? 'అసలు: ' : 'Principal: '}₹{loan.principalAmount.toLocaleString('en-IN')}
-                        </p>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-xs font-bold px-2 py-0.5 rounded bg-brand-100 text-brand-800">
+                            {loan.loanType === 'DF' ? 'Daily Finance' : 'Special (SP)'}
+                          </span>
+                          <p className="text-sm font-semibold text-slate-700 mt-1">
+                            {isTe ? 'అసలు: ' : 'Principal: '}₹{loan.principalAmount.toLocaleString('en-IN')}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs font-bold text-slate-500 uppercase">
+                            {isTe ? 'బాకీ బ్యాలెన్స్' : 'Outstanding'}
+                          </p>
+                          <p className="text-base font-bold text-slate-900">
+                            ₹{loan.outstandingBalance.toLocaleString('en-IN')}
+                          </p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-xs font-bold text-slate-500 uppercase">
-                          {isTe ? 'బాకీ బ్యాలెన్స్' : 'Outstanding'}
-                        </p>
-                        <p className="text-base font-bold text-slate-900">
-                          ₹{loan.outstandingBalance.toLocaleString('en-IN')}
-                        </p>
-                      </div>
+
+                      {/* View Milestones & Payoff Trigger */}
+                      <button
+                        type="button"
+                        onClick={() => handleInspectLoan(loan)}
+                        disabled={isLoadingInspector}
+                        className="w-full min-h-[44px] py-2 px-3 rounded-xl bg-teal-50 hover:bg-teal-100 active:bg-teal-200 border border-teal-200 text-teal-900 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                      >
+                        <Calendar size={15} className="text-teal-700" />
+                        <span>{isTe ? 'వాయిదాల షెడ్యూల్ / క్లోజర్ లెక్క చూడండి' : 'View Milestones & Early Payoff'}</span>
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -929,6 +965,25 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
             </form>
           </div>
         </div>
+      )}
+      {/* Schedule Inspector Modal for Existing Loans */}
+      {selectedLoanForInspector && (
+        <ScheduleInspectorModal
+          isOpen={isInspectorOpen}
+          onClose={() => {
+            setIsInspectorOpen(false);
+            setSelectedLoanForInspector(null);
+          }}
+          isTe={isTe}
+          loanType={selectedLoanForInspector.loanType}
+          schedules={inspectorSchedules}
+          principalAmount={selectedLoanForInspector.principalAmount}
+          totalAmount={selectedLoanForInspector.totalRepaymentAmount || selectedLoanForInspector.principalAmount}
+          startDate={selectedLoanForInspector.startDate}
+          endDate={selectedLoanForInspector.endDate || selectedLoanForInspector.startDate}
+          skipSundays={selectedLoanForInspector.skipSundays}
+          existingLoan={selectedLoanForInspector}
+        />
       )}
     </div>
   );
