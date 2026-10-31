@@ -28,7 +28,7 @@ export const Toast: React.FC<ToastProps> = ({
   const isError = type === 'error';
 
   return (
-    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-md animate-bounce-in transition-all">
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-[92%] max-w-md animate-bounce-in transition-all">
       <div
         className={`flex items-center justify-between p-4 rounded-2xl shadow-2xl border-2 backdrop-blur-md ${
           isSuccess

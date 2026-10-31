@@ -226,7 +226,7 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
 
     setIsSubmitting(true);
     try {
-      const updated = await borrowerRepo.updateBorrower(selectedBorrower.id, {
+      await borrowerRepo.updateBorrower(selectedBorrower.id, {
         name: trimmedName,
         phone: cleanPhone,
         guarantorName: editGuarantorName.trim() || undefined,
@@ -234,9 +234,18 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
         address: editAddress.trim() || undefined,
       });
 
-      setSelectedBorrower(updated);
+      // Close all modals and return directly to the Borrower Directory
+      setSelectedBorrower(null);
       setIsEditConfirmationOpen(false);
       setIsEditModalOpen(false);
+      setEditName('');
+      setEditPhone('');
+      setEditGuarantorName('');
+      setEditGuarantorPhone('');
+      setEditAddress('');
+      setEditFormError(null);
+
+      // Trigger success confirmation toast
       setSuccessToast(
         isTe
           ? '✓ రుణగ్రహీత వివరాలు విజయవంతంగా మార్చబడ్డాయి!'
