@@ -10,6 +10,7 @@ import { loanRepo } from '../db/repositories/loanRepo';
 import { paymentRepo } from '../db/repositories/paymentRepo';
 import { Borrower } from '../types/domain';
 import { generateDFSchedule, generateSPSchedule, formatDateToISO } from '../utils/loanCalculator';
+import { generateUUID } from '../utils/uuid';
 
 interface NewLoanPageProps {
   language: 'en' | 'te';
@@ -116,7 +117,7 @@ export const NewLoanPage: React.FC<NewLoanPageProps> = ({
     setIsSubmitting(true);
 
     try {
-      const loanId = crypto.randomUUID();
+      const loanId = generateUUID();
 
       if (loanType === 'DF') {
         // 1. Generate DF Schedules

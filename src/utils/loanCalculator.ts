@@ -1,4 +1,5 @@
 import { PaymentSchedule } from '../types/domain';
+import { generateUUID } from './uuid';
 
 export interface GenerateDFScheduleParams {
   loanId: string;
@@ -79,7 +80,7 @@ export function generateDFSchedule(params: GenerateDFScheduleParams): {
     const dueDate = formatDateToISO(currentDate);
 
     schedules.push({
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       loanId,
       borrowerId,
       lenderId,
@@ -149,7 +150,7 @@ export function generateSPSchedule(params: GenerateSPScheduleParams): {
     const dueDate = formatDateToISO(currentDate);
 
     schedules.push({
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       loanId,
       borrowerId,
       lenderId,

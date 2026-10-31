@@ -13,6 +13,7 @@ import {
 import { borrowerRepo } from '../db/repositories/borrowerRepo';
 import { loanRepo } from '../db/repositories/loanRepo';
 import { Borrower, Loan } from '../types/domain';
+import { generateUUID } from '../utils/uuid';
 
 interface BorrowersPageProps {
   language: 'en' | 'te';
@@ -130,7 +131,7 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
 
     try {
       await borrowerRepo.addBorrower({
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         lenderId: 'local-lender',
         name: trimmedName,
         phone: cleanPhone,
