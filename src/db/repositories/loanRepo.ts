@@ -48,6 +48,14 @@ export class LoanRepository {
   }
 
   /**
+   * Get all loans across all borrowers, sorted descending by start date (most recent first).
+   */
+  async getAllLoansSortedByRecent(): Promise<Loan[]> {
+    const list = await db.loans.toArray();
+    return list.sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
+  }
+
+  /**
    * Get loan by primary key ID.
    */
   async getLoanById(id: string): Promise<Loan | undefined> {

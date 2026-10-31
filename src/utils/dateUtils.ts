@@ -103,6 +103,19 @@ export function formatDisplayDate(isoStr: string, isTe: boolean): string {
   }
 }
 
+export function formatShortDate(isoStr: string, isTe: boolean): string {
+  try {
+    const d = parseISODate(isoStr);
+    const day = d.getDate();
+    const month = isTe ? TELUGU_MONTHS[d.getMonth()] : ENGLISH_MONTHS[d.getMonth()];
+    const year = d.getFullYear();
+
+    return `${day} ${month} ${year}`;
+  } catch {
+    return isoStr;
+  }
+}
+
 export function getWeekdayName(isoStr: string, isTe: boolean): string {
   try {
     const d = parseISODate(isoStr);
@@ -111,4 +124,3 @@ export function getWeekdayName(isoStr: string, isTe: boolean): string {
     return '';
   }
 }
-

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Users,
   UserPlus,
@@ -13,12 +13,14 @@ import {
   Trash2,
   AlertTriangle,
   Calendar,
+  History,
 } from 'lucide-react';
 import { borrowerRepo } from '../db/repositories/borrowerRepo';
 import { loanRepo } from '../db/repositories/loanRepo';
 import { paymentRepo } from '../db/repositories/paymentRepo';
 import { Borrower, Loan, PaymentSchedule } from '../types/domain';
 import { generateUUID } from '../utils/uuid';
+import { formatShortDate } from '../utils/dateUtils';
 import { ScheduleInspectorModal } from '../components/loans/ScheduleInspectorModal';
 import { Toast } from '../components/common/Toast';
 
@@ -67,6 +69,14 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteCountdown, setDeleteCountdown] = useState<number>(5);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Active View Mode: 'borrowers' (Directory) vs 'loans' (Loan History)
+  const [activeTab, setActiveTab] = useState<'borrowers' | 'loans'>('borrowers');
+  const [allLoans, setAllLoans] = useState<Loan[]>([]);
+  const [isLoadingAllLoans, setIsLoadingAllLoans] = useState(false);
+  const [loanSearchQuery, setLoanSearchQuery] = useState('');
+  const [loanStatusFilter, setLoanStatusFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [borrowerMap, setBorrowerMap] = useState<Record<string, Borrower>>({});
 
   // Reset form and close add modal
   const handleCloseAddModal = () => {
@@ -266,6 +276,13 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
     try {
       const list = await borrowerRepo.searchBorrowers(searchQuery);
       setBorrowers(list);
+      setBorrowerMap((prev) => {
+        const next = { ...prev };
+        for (const b of list) {
+          next[b.id] = b;
+        }
+        return next;
+      });
     } catch (err) {
       console.error('Error loading borrowers:', err);
     } finally {
@@ -273,9 +290,50 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
     }
   };
 
+  // Load all loans and map borrowers for Global Loan History
+  const loadAllLoans = async () => {
+    setIsLoadingAllLoans(true);
+    try {
+      const [loansList, borrowersList] = await Promise.all([
+        loanRepo.getAllLoansSortedByRecent(),
+        borrowerRepo.getAllBorrowers(),
+      ]);
+      setAllLoans(loansList);
+      const bMap: Record<string, Borrower> = {};
+      for (const b of borrowersList) {
+        bMap[b.id] = b;
+      }
+      setBorrowerMap(bMap);
+    } catch (err) {
+      console.error('Failed to load all loans history:', err);
+    } finally {
+      setIsLoadingAllLoans(false);
+    }
+  };
+
   useEffect(() => {
     loadBorrowers();
+    loadAllLoans();
   }, [searchQuery]);
+
+  // Filtered loans for Loan History view
+  const filteredLoans = useMemo(() => {
+    let list = allLoans;
+    if (loanStatusFilter !== 'all') {
+      list = list.filter((l) => l.status === loanStatusFilter);
+    }
+    const q = loanSearchQuery.trim().toLowerCase();
+    if (q) {
+      list = list.filter((l) => {
+        const borrower = borrowerMap[l.borrowerId];
+        const nameMatch = borrower?.name.toLowerCase().includes(q) || false;
+        const phoneMatch = borrower?.phone.includes(q) || false;
+        const typeMatch = l.loanType.toLowerCase().includes(q);
+        return nameMatch || phoneMatch || typeMatch;
+      });
+    }
+    return list;
+  }, [allLoans, loanStatusFilter, loanSearchQuery, borrowerMap]);
 
   // Handle Form Submit for New Borrower
   const handleAddBorrower = async (e: React.FormEvent) => {
@@ -357,93 +415,304 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
 
       {/* Top Header & 56px Add Button */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-slate-800">
-          {isTe ? 'రుణగ్రహీతల జాబితా' : 'Borrower Directory'}
-        </h2>
+        <div>
+          <h2 className="text-xl font-black text-slate-900 leading-tight">
+            {activeTab === 'borrowers'
+              ? (isTe ? 'రుణగ్రహీతల జాబితా' : 'Borrower Directory')
+              : (isTe ? 'రుణాల చరిత్ర' : 'Loan History')}
+          </h2>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">
+            {activeTab === 'borrowers'
+              ? (isTe ? 'ఖాతాదారుల వివరాలు' : 'Manage client profiles')
+              : (isTe ? 'ఇటీవలి రుణాలు (క్రమబద్ధీకరించబడ్డాయి)' : 'All issued loans (most recent first)')}
+          </p>
+        </div>
+
+        {activeTab === 'borrowers' && (
+          <button
+            onClick={() => {
+              setFormError(null);
+              setIsAddModalOpen(true);
+            }}
+            className="flex min-h-[56px] items-center space-x-2 bg-brand-700 hover:bg-brand-800 text-white px-4 py-2 rounded-2xl text-base font-bold shadow-md active:scale-95 transition-all"
+          >
+            <UserPlus className="h-5 w-5" />
+            <span>{isTe ? 'కొత్త వ్యక్తి' : 'Add Borrower'}</span>
+          </button>
+        )}
+      </div>
+
+      {/* Segmented Tab Switcher: Borrowers Directory vs All Loans History */}
+      <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 gap-1">
         <button
-          onClick={() => {
-            setFormError(null);
-            setIsAddModalOpen(true);
-          }}
-          className="flex min-h-[56px] items-center space-x-2 bg-brand-700 hover:bg-brand-800 text-white px-4 py-2 rounded-2xl text-base font-bold shadow-md active:scale-95 transition-all"
+          type="button"
+          onClick={() => setActiveTab('borrowers')}
+          className={`flex-1 min-h-[46px] rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${
+            activeTab === 'borrowers'
+              ? 'bg-white text-teal-900 shadow-sm border border-slate-200/60'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
         >
-          <UserPlus className="h-5 w-5" />
-          <span>{isTe ? 'కొత్త వ్యక్తి' : 'Add Borrower'}</span>
+          <Users size={18} />
+          <span>{isTe ? 'ఖాతాదారులు' : 'Borrowers'}</span>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-extrabold">
+            {borrowers.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('loans');
+            loadAllLoans();
+          }}
+          className={`flex-1 min-h-[46px] rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${
+            activeTab === 'loans'
+              ? 'bg-white text-teal-900 shadow-sm border border-slate-200/60'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <History size={18} />
+          <span>{isTe ? 'రుణాల చరిత్ర' : 'Loan History'}</span>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-extrabold">
+            {allLoans.length}
+          </span>
         </button>
       </div>
 
-      {/* Search Input Bar (56px) */}
-      <div className="relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder={isTe ? 'పేరు లేదా ఫోన్ నంబర్ శోధించండి...' : 'Search by name or phone...'}
-          className="w-full min-h-[56px] pl-12 pr-4 bg-white border border-slate-200 rounded-2xl text-base placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-        />
-      </div>
-
-      {/* Borrowers List */}
-      {isLoading ? (
-        <div className="text-center py-8 text-base font-semibold text-slate-400">
-          {isTe ? 'లోడ్ అవుతోంది...' : 'Loading...'}
-        </div>
-      ) : borrowers.length === 0 ? (
-        <div className="bg-white rounded-2xl p-8 shadow-sm border border-slate-200 text-center space-y-3">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-brand-50 text-brand-700">
-            <Users className="h-8 w-8" />
+      {/* TAB 1: BORROWERS DIRECTORY */}
+      {activeTab === 'borrowers' ? (
+        <>
+          {/* Search Input Bar (56px) */}
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={isTe ? 'పేరు లేదా ఫోన్ నంబర్ శోధించండి...' : 'Search by name or phone...'}
+              className="w-full min-h-[56px] pl-12 pr-4 bg-white border border-slate-200 rounded-2xl text-base placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
           </div>
-          <h3 className="text-lg font-bold text-slate-700">
-            {isTe ? 'రుణగ్రహీతలు ఎవరూ లేరు' : 'No Borrowers Found'}
-          </h3>
-          <p className="text-base text-slate-500">
-            {isTe
-              ? 'మొదటి రుణగ్రహీతను జోడించడానికి పైన ఉన్న బటన్‌ను నొక్కండి.'
-              : 'Tap "Add Borrower" above to create your first borrower in the local vault.'}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {borrowers.map((borrower) => (
-            <div
-              key={borrower.id}
-              onClick={() => handleOpenBorrowerDetails(borrower)}
-              className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex items-center justify-between cursor-pointer hover:border-brand-400 active:scale-[0.99] transition-all"
-            >
-              <div className="flex items-center space-x-3.5">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-100 text-brand-800 font-bold text-xl shadow-inner">
-                  {borrower.name.charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <h4 className="text-xl font-bold text-slate-900 leading-tight">
-                    {borrower.name}
-                  </h4>
-                  <p className="text-base font-semibold text-slate-600 mt-1 flex items-center space-x-1">
-                    <Phone className="h-4 w-4 text-brand-600 inline" />
-                    <span>+91 {borrower.phone}</span>
-                  </p>
-                  {borrower.guarantorName && (
-                    <p className="text-sm font-medium text-slate-500 mt-0.5">
-                      {isTe ? 'హామీదారు: ' : 'Ref: '}
-                      {borrower.guarantorName}
-                    </p>
-                  )}
-                </div>
-              </div>
 
-              {/* Trust Score Badge */}
-              <div className="flex flex-col items-end">
-                <span className="flex items-center space-x-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-sm font-bold text-emerald-700 border border-emerald-200 shadow-sm">
-                  <ShieldCheck className="h-4 w-4" />
-                  <span>{borrower.trustScore.toFixed(1)}</span>
-                </span>
-                <span className="text-xs font-semibold text-slate-500 mt-1">
-                  {isTe ? 'నమ్మకం స్కోర్' : 'Trust Score'}
-                </span>
-              </div>
+          {/* Borrowers List */}
+          {isLoading ? (
+            <div className="text-center py-8 text-base font-semibold text-slate-400">
+              {isTe ? 'లోడ్ అవుతోంది...' : 'Loading...'}
             </div>
-          ))}
+          ) : borrowers.length === 0 ? (
+            <div className="bg-white rounded-2xl p-8 shadow-sm border border-slate-200 text-center space-y-3">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-brand-50 text-brand-700">
+                <Users className="h-8 w-8" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-700">
+                {isTe ? 'రుణగ్రహీతలు ఎవరూ లేరు' : 'No Borrowers Found'}
+              </h3>
+              <p className="text-base text-slate-500">
+                {isTe
+                  ? 'మొదటి రుణగ్రహీతను జోడించడానికి పైన ఉన్న బటన్‌ను నొక్కండి.'
+                  : 'Tap "Add Borrower" above to create your first borrower in the local vault.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {borrowers.map((borrower) => (
+                <div
+                  key={borrower.id}
+                  onClick={() => handleOpenBorrowerDetails(borrower)}
+                  className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex items-center justify-between cursor-pointer hover:border-brand-400 active:scale-[0.99] transition-all"
+                >
+                  <div className="flex items-center space-x-3.5">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-100 text-brand-800 font-bold text-xl shadow-inner">
+                      {borrower.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <h4 className="text-xl font-bold text-slate-900 leading-tight">
+                        {borrower.name}
+                      </h4>
+                      <p className="text-base font-semibold text-slate-600 mt-1 flex items-center space-x-1">
+                        <Phone className="h-4 w-4 text-brand-600 inline" />
+                        <span>+91 {borrower.phone}</span>
+                      </p>
+                      {borrower.guarantorName && (
+                        <p className="text-sm font-medium text-slate-500 mt-0.5">
+                          {isTe ? 'హామీదారు: ' : 'Ref: '}
+                          {borrower.guarantorName}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Trust Score Badge */}
+                  <div className="flex flex-col items-end">
+                    <span className="flex items-center space-x-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-sm font-bold text-emerald-700 border border-emerald-200 shadow-sm">
+                      <ShieldCheck className="h-4 w-4" />
+                      <span>{borrower.trustScore.toFixed(1)}</span>
+                    </span>
+                    <span className="text-xs font-semibold text-slate-500 mt-1">
+                      {isTe ? 'నమ్మకం స్కోర్' : 'Trust Score'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        /* TAB 2: GLOBAL LOAN HISTORY (Sorted by Most Recent) */
+        <div className="space-y-3">
+          {/* Search Bar & Status Filters */}
+          <div className="space-y-2">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+              <input
+                type="text"
+                value={loanSearchQuery}
+                onChange={(e) => setLoanSearchQuery(e.target.value)}
+                placeholder={isTe ? 'రుణగ్రహీత పేరు లేదా ఫోన్ నంబర్‌తో వెతకండి...' : 'Search by borrower name or phone...'}
+                className="w-full min-h-[56px] pl-12 pr-4 bg-white border border-slate-200 rounded-2xl text-base placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
+              />
+            </div>
+
+            {/* Filter Pills */}
+            <div className="flex gap-2">
+              {(['all', 'active', 'completed'] as const).map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  onClick={() => setLoanStatusFilter(filter)}
+                  className={`py-1.5 px-3.5 rounded-xl text-xs font-bold capitalize transition-all ${
+                    loanStatusFilter === filter
+                      ? 'bg-teal-800 text-white shadow-sm'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  {isTe
+                    ? filter === 'all'
+                      ? `అన్నీ (${allLoans.length})`
+                      : filter === 'active'
+                      ? `బాకీ (${allLoans.filter((l) => l.status === 'active').length})`
+                      : `పూర్తయినవి (${allLoans.filter((l) => l.status === 'completed').length})`
+                    : `${filter} (${filter === 'all' ? allLoans.length : allLoans.filter((l) => l.status === filter).length})`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Loans History List */}
+          {isLoadingAllLoans ? (
+            <div className="text-center py-8 text-base font-semibold text-slate-400">
+              {isTe ? 'రుణాల చరిత్ర లోడ్ అవుతోంది...' : 'Loading loan history...'}
+            </div>
+          ) : filteredLoans.length === 0 ? (
+            <div className="bg-white rounded-2xl p-8 shadow-sm border border-slate-200 text-center space-y-3">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-teal-50 text-teal-800">
+                <History className="h-8 w-8" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-700">
+                {isTe ? 'ఎటువంటి రుణాలు కనుగొనబడలేదు' : 'No Loans Found'}
+              </h3>
+              <p className="text-sm text-slate-500">
+                {isTe
+                  ? 'ఇప్పటివరకు ఎటువంటి రుణాలు మంజూరు చేయబడలేదు లేదా శోధనకు సరిపోలలేదు.'
+                  : 'No loans have been recorded yet or matched your query.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredLoans.map((loan) => {
+                const borrower = borrowerMap[loan.borrowerId];
+                const isCompleted = loan.status === 'completed';
+
+                return (
+                  <div
+                    key={loan.id}
+                    className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 space-y-3 hover:border-teal-400 transition-all"
+                  >
+                    {/* Header: Borrower Name & Loan Type Badges */}
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => borrower && handleOpenBorrowerDetails(borrower)}
+                          className="text-left font-black text-lg text-slate-900 hover:text-teal-800 hover:underline block leading-tight"
+                        >
+                          {borrower ? borrower.name : 'Unknown Borrower'}
+                        </button>
+                        <span className="text-xs font-semibold text-slate-500 block mt-0.5">
+                          {borrower ? `+91 ${borrower.phone}` : ''}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-teal-100 text-teal-900 border border-teal-200">
+                          {loan.loanType === 'DF' ? 'Daily Finance' : 'Special (SP)'}
+                        </span>
+                        <span
+                          className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                            isCompleted
+                              ? 'bg-blue-50 text-blue-800 border-blue-200'
+                              : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          }`}
+                        >
+                          {isCompleted
+                            ? (isTe ? 'పూర్తయింది' : 'Completed')
+                            : (isTe ? 'బాకీ' : 'Active')}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Financial Amounts Row */}
+                    <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
+                      <div>
+                        <span className="text-[11px] font-semibold text-slate-500 uppercase block">
+                          {isTe ? 'అసలు మొత్తం' : 'Principal Amount'}
+                        </span>
+                        <span className="text-base font-bold text-slate-900 block mt-0.5">
+                          ₹{loan.principalAmount.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[11px] font-semibold text-slate-500 uppercase block">
+                          {isTe ? 'బకాయి మొత్తం' : 'Outstanding'}
+                        </span>
+                        <span className={`text-base font-extrabold block mt-0.5 ${isCompleted ? 'text-blue-800' : 'text-teal-900'}`}>
+                          ₹{loan.outstandingBalance.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Dates Row: Date Issued & Expected End Date */}
+                    <div className="grid grid-cols-2 gap-2 text-xs bg-teal-50/70 p-2.5 rounded-xl border border-teal-200/80">
+                      <div>
+                        <span className="text-teal-900 font-semibold block">{isTe ? 'ఇచ్చిన తేదీ (Issued):' : 'Date Issued:'}</span>
+                        <span className="font-bold text-gray-900 block mt-0.5">
+                          {formatShortDate(loan.startDate, isTe)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-teal-900 font-semibold block">{isTe ? 'ముగింపు తేదీ (Expected End):' : 'Expected End Date:'}</span>
+                        <span className="font-extrabold text-teal-950 block mt-0.5">
+                          {loan.endDate ? formatShortDate(loan.endDate, isTe) : '—'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Milestone Inspector Trigger */}
+                    <button
+                      type="button"
+                      onClick={() => handleInspectLoan(loan)}
+                      disabled={isLoadingInspector}
+                      className="w-full min-h-[44px] py-2 px-3 rounded-xl bg-teal-50 hover:bg-teal-100 active:bg-teal-200 border border-teal-200 text-teal-900 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                    >
+                      <Calendar size={15} className="text-teal-700" />
+                      <span>{isTe ? 'వాయిదాల షెడ్యూల్ / క్లోజర్ లెక్క చూడండి' : 'View Milestones & Early Payoff'}</span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -593,6 +862,20 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
                           <p className="text-base font-bold text-slate-900">
                             ₹{loan.outstandingBalance.toLocaleString('en-IN')}
                           </p>
+                        </div>
+                      </div>
+
+                      {/* Dates Row: Start Date & Expected End Date */}
+                      <div className="grid grid-cols-2 gap-2 text-xs bg-white p-2.5 rounded-xl border border-slate-200">
+                        <div>
+                          <span className="text-slate-500 font-semibold block">{isTe ? 'ప్రారంభ తేదీ:' : 'Start Date:'}</span>
+                          <span className="font-bold text-slate-900 block mt-0.5">{formatShortDate(loan.startDate, isTe)}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 font-semibold block">{isTe ? 'ముగింపు తేదీ:' : 'Expected End:'}</span>
+                          <span className="font-bold text-teal-900 block mt-0.5">
+                            {loan.endDate ? formatShortDate(loan.endDate, isTe) : '—'}
+                          </span>
                         </div>
                       </div>
 

@@ -125,6 +125,13 @@ export class BorrowerRepository {
   }
 
   /**
+   * Get all borrowers (active and archived).
+   */
+  async getAllBorrowers(): Promise<Borrower[]> {
+    return await db.borrowers.toArray();
+  }
+
+  /**
    * Get all active borrowers.
    */
   async getActiveBorrowers(): Promise<Borrower[]> {

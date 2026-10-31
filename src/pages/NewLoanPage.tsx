@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   PlusCircle,
   Calendar,
@@ -10,6 +10,7 @@ import { loanRepo } from '../db/repositories/loanRepo';
 import { paymentRepo } from '../db/repositories/paymentRepo';
 import { Borrower, PaymentSchedule } from '../types/domain';
 import { generateDFSchedule, generateSPSchedule, formatDateToISO } from '../utils/loanCalculator';
+import { formatShortDate } from '../utils/dateUtils';
 import { generateUUID } from '../utils/uuid';
 import { ScheduleInspectorModal } from '../components/loans/ScheduleInspectorModal';
 import { BorrowerPickerDropdown } from '../components/loans/BorrowerPickerDropdown';
@@ -132,6 +133,51 @@ export const NewLoanPage: React.FC<NewLoanPageProps> = ({
 
   const monthlyInterestAmount =
     loanType === 'SP' ? Math.round(principal * (monthlyInterestRate / 100)) : 0;
+
+  // Live calculation for expected end date & summary (including installment days and skip sundays)
+  const liveCalculation = useMemo(() => {
+    if (loanType === 'DF') {
+      try {
+        const res = generateDFSchedule({
+          loanId: 'temp',
+          borrowerId: selectedBorrowerId || 'temp',
+          totalRepayment: totalRepayment > 0 ? totalRepayment : principal,
+          installments: Math.max(1, installments),
+          frequency,
+          startDateStr: startDate,
+          skipSundays,
+        });
+        return {
+          installmentAmount: res.installmentAmount,
+          endDate: res.endDate,
+          totalCalendarDays: res.totalCalendarDays,
+          sundaysSkippedCount: res.sundaysSkippedCount,
+        };
+      } catch {
+        return null;
+      }
+    } else {
+      try {
+        const res = generateSPSchedule({
+          loanId: 'temp',
+          borrowerId: selectedBorrowerId || 'temp',
+          principal: Math.max(1, principal),
+          monthlyInterestRate: Math.max(0.1, monthlyInterestRate),
+          frequency: 'monthly',
+          cycles: Math.max(1, interestCycles),
+          startDateStr: startDate,
+        });
+        return {
+          installmentAmount: res.interestPerCycle,
+          endDate: res.endDate,
+          totalCalendarDays: interestCycles * 30,
+          sundaysSkippedCount: 0,
+        };
+      } catch {
+        return null;
+      }
+    }
+  }, [loanType, totalRepayment, principal, installments, frequency, startDate, skipSundays, monthlyInterestRate, interestCycles, selectedBorrowerId]);
 
   // Submit and Create Loan
   const handleCreateLoan = async (e: React.FormEvent) => {
@@ -482,25 +528,59 @@ export const NewLoanPage: React.FC<NewLoanPageProps> = ({
               </div>
             </div>
 
-            {/* Calculated Breakdown Box */}
-            <div className="rounded-2xl bg-brand-50 p-4 border border-brand-200 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-brand-800">
-                  {isTe ? 'రోజువారీ వసూలు' : 'Daily Collection'}
-                </p>
-                <p className="text-2xl font-black text-brand-950 mt-0.5">
-                  ₹{dailyInstallment.toLocaleString('en-IN')}{' '}
-                  <span className="text-xs font-normal text-brand-700">/ రోజుకి</span>
-                </p>
+            {/* Calculated Breakdown Box with Expected End Date */}
+            <div className="rounded-2xl bg-teal-50 p-4 border-2 border-teal-200 space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-teal-200/60">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-teal-800">
+                    {isTe ? 'రోజువారీ వసూలు' : 'Daily Collection'}
+                  </p>
+                  <p className="text-2xl font-black text-teal-950 mt-0.5">
+                    ₹{dailyInstallment.toLocaleString('en-IN')}{' '}
+                    <span className="text-xs font-normal text-teal-700">/ రోజుకి</span>
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-semibold text-teal-800">
+                    {installments} {isTe ? 'వాయిదాలు' : 'installments'}
+                  </p>
+                  <p className="text-xs font-bold text-teal-900 mt-1">
+                    {isTe ? 'లాభం: ' : 'Profit: '}₹{(totalRepayment - principal).toLocaleString('en-IN')}
+                  </p>
+                </div>
               </div>
-              <div className="text-right">
-                <p className="text-xs font-semibold text-brand-800">
-                  {installments} {isTe ? 'రోజులు' : 'days'}
-                </p>
-                <p className="text-xs font-bold text-brand-900 mt-1">
-                  {isTe ? 'లాభం: ' : 'Profit: '}₹{(totalRepayment - principal).toLocaleString('en-IN')}
-                </p>
+
+              {/* Start Date & Expected End Date */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="bg-white p-2.5 rounded-xl border border-teal-100 shadow-sm">
+                  <span className="text-gray-500 font-semibold block">{isTe ? 'ప్రారంభ తేదీ:' : 'Start Date:'}</span>
+                  <span className="font-bold text-gray-900 block mt-0.5">{formatShortDate(startDate, isTe)}</span>
+                </div>
+                <div className="bg-white p-2.5 rounded-xl border-2 border-teal-500 shadow-sm">
+                  <span className="text-teal-800 font-bold block">{isTe ? 'ముగింపు తేదీ (Expected End):' : 'Expected End Date:'}</span>
+                  <span className="font-extrabold text-teal-950 block mt-0.5">
+                    {liveCalculation ? formatShortDate(liveCalculation.endDate, isTe) : '—'}
+                  </span>
+                </div>
               </div>
+
+              {/* Calendar Days & Sunday Info */}
+              {liveCalculation && (
+                <div className="flex items-center justify-between text-[11px] font-semibold text-teal-900 pt-1">
+                  <span>
+                    {isTe
+                      ? `మొత్తం వ్యవధి: ${liveCalculation.totalCalendarDays} రోజులు`
+                      : `Total Duration: ${liveCalculation.totalCalendarDays} calendar days`}
+                  </span>
+                  {skipSundays && liveCalculation.sundaysSkippedCount > 0 && (
+                    <span className="bg-teal-200/80 text-teal-950 px-2 py-0.5 rounded-full font-bold">
+                      {isTe
+                        ? `${liveCalculation.sundaysSkippedCount} ఆదివారాలు సెలవు ✓`
+                        : `${liveCalculation.sundaysSkippedCount} Sundays skipped ✓`}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -546,24 +626,45 @@ export const NewLoanPage: React.FC<NewLoanPageProps> = ({
               </div>
             </div>
 
-            {/* Calculated SP Box */}
-            <div className="rounded-2xl bg-brand-50 p-4 border border-brand-200 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-brand-800">
-                  {isTe ? 'నెలవారీ వడ్డీ' : 'Monthly Interest'}
-                </p>
-                <p className="text-2xl font-black text-brand-950 mt-0.5">
-                  ₹{monthlyInterestAmount.toLocaleString('en-IN')}{' '}
-                  <span className="text-xs font-normal text-brand-700">/ నెలకు</span>
-                </p>
+            {/* Calculated SP Box with Expected End Date */}
+            <div className="rounded-2xl bg-teal-50 p-4 border-2 border-teal-200 space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-teal-200/60">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-teal-800">
+                    {isTe ? 'నెలవారీ వడ్డీ' : 'Monthly Interest'}
+                  </p>
+                  <p className="text-2xl font-black text-teal-950 mt-0.5">
+                    ₹{monthlyInterestAmount.toLocaleString('en-IN')}{' '}
+                    <span className="text-xs font-normal text-teal-700">/ నెలకు</span>
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-semibold text-teal-800">
+                    {monthlyInterestRate}% {isTe ? 'నెలకు' : '/ month'}
+                  </p>
+                  <p className="text-xs font-bold text-teal-900 mt-1">
+                    {interestCycles} {isTe ? 'నెలలు' : 'months'}
+                  </p>
+                </div>
               </div>
-              <div className="text-right">
-                <p className="text-xs font-semibold text-brand-800">
-                  {monthlyInterestRate}% {isTe ? 'నెలకు' : '/ month'}
-                </p>
-                <p className="text-xs font-bold text-brand-900 mt-1">
-                  {isTe ? 'అసలు ముగింపులో' : 'Principal at end'}
-                </p>
+
+              {/* Start Date & Expected Maturity Date */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="bg-white p-2.5 rounded-xl border border-teal-100 shadow-sm">
+                  <span className="text-gray-500 font-semibold block">{isTe ? 'ప్రారంభ తేదీ:' : 'Start Date:'}</span>
+                  <span className="font-bold text-gray-900 block mt-0.5">{formatShortDate(startDate, isTe)}</span>
+                </div>
+                <div className="bg-white p-2.5 rounded-xl border-2 border-teal-500 shadow-sm">
+                  <span className="text-teal-800 font-bold block">{isTe ? 'గడువు ముగింపు (Maturity Date):' : 'Expected Maturity Date:'}</span>
+                  <span className="font-extrabold text-teal-950 block mt-0.5">
+                    {liveCalculation ? formatShortDate(liveCalculation.endDate, isTe) : '—'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-[11px] font-semibold text-teal-900 pt-1 flex justify-between">
+                <span>{isTe ? 'అసలు ముగింపులో తిరిగి చెల్లించబడుతుంది' : 'Principal returned at maturity'}</span>
+                <span>{isTe ? `మొత్తం వడ్డీ: ₹${(monthlyInterestAmount * interestCycles).toLocaleString('en-IN')}` : `Total Interest: ₹${(monthlyInterestAmount * interestCycles).toLocaleString('en-IN')}`}</span>
               </div>
             </div>
           </div>
