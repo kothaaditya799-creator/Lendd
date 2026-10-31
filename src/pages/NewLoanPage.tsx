@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   PlusCircle,
   Calendar,
-  CheckCircle2,
   ArrowRight,
   Eye,
 } from 'lucide-react';
@@ -13,6 +12,8 @@ import { Borrower, PaymentSchedule } from '../types/domain';
 import { generateDFSchedule, generateSPSchedule, formatDateToISO } from '../utils/loanCalculator';
 import { generateUUID } from '../utils/uuid';
 import { ScheduleInspectorModal } from '../components/loans/ScheduleInspectorModal';
+import { BorrowerPickerDropdown } from '../components/loans/BorrowerPickerDropdown';
+import { Toast } from '../components/common/Toast';
 
 interface NewLoanPageProps {
   language: 'en' | 'te';
@@ -91,15 +92,18 @@ export const NewLoanPage: React.FC<NewLoanPageProps> = ({
     setIsPreviewOpen(true);
   };
 
-  // Load borrowers on mount
+  // Load borrowers on mount (sorted alphabetically, no default pre-selection)
   useEffect(() => {
     borrowerRepo.getActiveBorrowers().then((list) => {
-      setBorrowers(list);
-      if (!selectedBorrowerId && list.length > 0) {
-        setSelectedBorrowerId(list[0].id);
+      const sorted = [...list].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+      );
+      setBorrowers(sorted);
+      if (preSelectedBorrowerId) {
+        setSelectedBorrowerId(preSelectedBorrowerId);
       }
     });
-  }, []);
+  }, [preSelectedBorrowerId]);
 
   // Sync custom principal input
   const handleSelectChip = (amount: number) => {
@@ -248,8 +252,6 @@ export const NewLoanPage: React.FC<NewLoanPageProps> = ({
     }
   };
 
-  const selectedBorrower = borrowers.find((b) => b.id === selectedBorrowerId);
-
   return (
     <div className="p-4 space-y-4">
       {/* Page Title */}
@@ -260,13 +262,7 @@ export const NewLoanPage: React.FC<NewLoanPageProps> = ({
         </h2>
       </div>
 
-      {/* Success Notification Banner */}
-      {successMessage && (
-        <div className="rounded-2xl bg-emerald-50 p-4 text-sm font-bold text-emerald-800 border border-emerald-200 flex items-center space-x-2">
-          <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
-          <span>{successMessage}</span>
-        </div>
-      )}
+      <Toast message={successMessage} onClose={() => setSuccessMessage(null)} />
 
       {/* Error Banner */}
       {errorMessage && (
@@ -289,24 +285,12 @@ export const NewLoanPage: React.FC<NewLoanPageProps> = ({
                 : 'No borrowers found. Please add a borrower first in the Borrowers tab.'}
             </p>
           ) : (
-            <select
-              value={selectedBorrowerId}
-              onChange={(e) => setSelectedBorrowerId(e.target.value)}
-              className="w-full min-h-[56px] px-4 bg-slate-50 border border-slate-200 rounded-2xl text-base font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-            >
-              {borrowers.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name} (+91 {b.phone})
-                </option>
-              ))}
-            </select>
-          )}
-
-          {selectedBorrower && (
-            <p className="text-xs font-semibold text-slate-500 mt-1">
-              {isTe ? 'ఎంచుకున్న వ్యక్తి: ' : 'Selected: '}
-              <span className="text-brand-800 font-bold">{selectedBorrower.name}</span> (★ {selectedBorrower.trustScore.toFixed(1)})
-            </p>
+            <BorrowerPickerDropdown
+              borrowers={borrowers}
+              selectedBorrowerId={selectedBorrowerId}
+              onSelectBorrower={setSelectedBorrowerId}
+              isTe={isTe}
+            />
           )}
         </div>
 
@@ -352,55 +336,60 @@ export const NewLoanPage: React.FC<NewLoanPageProps> = ({
           </div>
         </div>
 
-        {/* Step 3: Amount Selection with 56px Chips */}
+        {/* Step 3: Amount Selection (Custom Textbox FIRST, then Preferred Chips) */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 space-y-3">
           <div className="flex items-center justify-between">
             <label className="block text-sm font-bold uppercase tracking-wider text-slate-700">
-              {isTe ? '3. అసలు మొత్తం ఎంచుకోండి *' : '3. Principal Amount *'}
+              {isTe ? '3. అసలు మొత్తం (Principal Amount) *' : '3. Principal Amount *'}
             </label>
             <span className="text-xl font-extrabold text-brand-800">
               ₹{principal.toLocaleString('en-IN')}
             </span>
           </div>
 
-          {/* Quick-Select Chips (56px) */}
-          <div className="grid grid-cols-2 gap-2.5">
-            {[10000, 20000, 50000, 100000].map((amount) => {
-              const isSelected = principal === amount && !customPrincipal;
-              return (
-                <button
-                  key={amount}
-                  type="button"
-                  onClick={() => handleSelectChip(amount)}
-                  className={`min-h-[56px] rounded-2xl text-lg font-bold border-2 transition-all active:scale-95 ${
-                    isSelected
-                      ? 'border-brand-700 bg-brand-700 text-white shadow-md'
-                      : 'border-slate-200 bg-slate-50 text-slate-800 hover:border-brand-300'
-                  }`}
-                >
-                  ₹{amount.toLocaleString('en-IN')}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Custom Amount Field */}
+          {/* Custom Amount Field (NOW ABOVE PREFERRED CHIPS) */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 mb-1">
-              {isTe ? 'లేదా ఇతర మొత్తం నమోదు చేయండి' : 'Or enter custom amount:'}
+              {isTe ? 'అసలు మొత్తం నమోదు చేయండి (రూపాయల్లో):' : 'Enter Principal Amount (in Rupees):'}
             </label>
             <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base font-bold text-slate-400">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-bold text-slate-400">
                 ₹
               </span>
               <input
                 type="tel"
                 inputMode="numeric"
-                value={customPrincipal}
+                value={customPrincipal || (principal > 0 ? principal.toString() : '')}
                 onChange={(e) => handleCustomPrincipalChange(e.target.value)}
-                placeholder="e.g. 35000"
-                className="w-full min-h-[56px] pl-10 pr-4 bg-slate-50 border border-slate-200 rounded-2xl text-lg font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                placeholder="e.g. 10000"
+                className="w-full min-h-[56px] pl-10 pr-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-xl font-black text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-600 focus:border-teal-600 transition-all"
               />
+            </div>
+          </div>
+
+          {/* Preferred / Quick-Select Chips (NOW BELOW CUSTOM INPUT) */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1.5">
+              {isTe ? 'లేదా ప్రామాణిక మొత్తాన్ని ఎంచుకోండి:' : 'Or pick standard amount:'}
+            </label>
+            <div className="grid grid-cols-2 gap-2.5">
+              {[10000, 20000, 50000, 100000].map((amount) => {
+                const isSelected = principal === amount;
+                return (
+                  <button
+                    key={amount}
+                    type="button"
+                    onClick={() => handleSelectChip(amount)}
+                    className={`min-h-[56px] rounded-2xl text-lg font-bold border-2 transition-all active:scale-95 ${
+                      isSelected
+                        ? 'border-brand-700 bg-brand-700 text-white shadow-md'
+                        : 'border-slate-200 bg-slate-50 text-slate-800 hover:border-brand-300'
+                    }`}
+                  >
+                    ₹{amount.toLocaleString('en-IN')}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>

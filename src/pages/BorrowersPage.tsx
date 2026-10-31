@@ -20,6 +20,7 @@ import { paymentRepo } from '../db/repositories/paymentRepo';
 import { Borrower, Loan, PaymentSchedule } from '../types/domain';
 import { generateUUID } from '../utils/uuid';
 import { ScheduleInspectorModal } from '../components/loans/ScheduleInspectorModal';
+import { Toast } from '../components/common/Toast';
 
 interface BorrowersPageProps {
   language: 'en' | 'te';
@@ -44,6 +45,7 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
   const [guarantorPhone, setGuarantorPhone] = useState('');
   const [address, setAddress] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [successToast, setSuccessToast] = useState<string | null>(null);
 
   // Selected Borrower Details Sheet State
   const [selectedBorrower, setSelectedBorrower] = useState<Borrower | null>(null);
@@ -169,6 +171,11 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
       await borrowerRepo.deleteBorrower(selectedBorrower.id);
       setIsDeleteModalOpen(false);
       setSelectedBorrower(null);
+      setSuccessToast(
+        isTe
+          ? '✓ ఖాతాదారుడు విజయవంతంగా తొలగించబడ్డారు.'
+          : '✓ Borrower deleted successfully.'
+      );
       await loadBorrowers();
     } catch (err: unknown) {
       setDeleteError(err instanceof Error ? err.message : 'Deletion failed');
@@ -226,6 +233,11 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
       setSelectedBorrower(updated);
       setIsEditModalOpen(false);
       setIsConfirmingEdit(false);
+      setSuccessToast(
+        isTe
+          ? '✓ వివరాలు విజయవంతంగా నవీకరించబడ్డాయి!'
+          : '✓ Borrower details updated successfully!'
+      );
       await loadBorrowers();
     } catch (err: unknown) {
       setEditFormError(err instanceof Error ? err.message : 'Update failed');
@@ -300,6 +312,11 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
       });
 
       handleCloseAddModal();
+      setSuccessToast(
+        isTe
+          ? '✓ ఖాతాదారుడు విజయవంతంగా జోడించబడ్డారు!'
+          : '✓ Borrower added successfully!'
+      );
       await loadBorrowers();
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -322,6 +339,9 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
 
   return (
     <div className="p-4 space-y-4">
+      {/* Success Notification Toast */}
+      <Toast message={successToast} onClose={() => setSuccessToast(null)} />
+
       {/* Top Header & 56px Add Button */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-slate-800">
