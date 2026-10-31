@@ -21,6 +21,7 @@ interface ScheduleInspectorModalProps {
   isTe: boolean;
   title?: string;
   loanType: 'DF' | 'SP';
+  frequency?: 'daily' | 'weekly' | 'monthly';
   schedules: PaymentSchedule[];
   principalAmount: number;
   totalAmount: number;
@@ -38,6 +39,7 @@ export const ScheduleInspectorModal: React.FC<ScheduleInspectorModalProps> = ({
   isTe,
   title,
   loanType,
+  frequency = 'daily',
   schedules,
   principalAmount,
   totalAmount,
@@ -57,10 +59,18 @@ export const ScheduleInspectorModal: React.FC<ScheduleInspectorModalProps> = ({
     title ||
     (isTe
       ? loanType === 'DF'
-        ? 'రోజువారీ ఫైనాన్స్ వాయిదాల షెడ్యూల్'
+        ? frequency === 'weekly'
+          ? 'వారపు ఫైనాన్స్ వాయిదాల షెడ్యూల్'
+          : frequency === 'monthly'
+          ? 'నెలవారీ ఫైనాన్స్ వాయిదాల షెడ్యూల్'
+          : 'రోజువారీ ఫైనాన్స్ వాయిదాల షెడ్యూల్'
         : 'స్పెషల్ వడ్డీ చెల్లింపుల షెడ్యూల్'
       : loanType === 'DF'
-      ? 'Daily Finance Installment Schedule'
+      ? frequency === 'weekly'
+        ? 'Weekly Finance Installment Schedule'
+        : frequency === 'monthly'
+        ? 'Monthly Finance Installment Schedule'
+        : 'Daily Finance Installment Schedule'
       : 'Special Interest Milestone Schedule');
 
   // Early payoff figures if existing loan or simulated
@@ -130,8 +140,19 @@ export const ScheduleInspectorModal: React.FC<ScheduleInspectorModalProps> = ({
             <div>
               <h3 className="font-bold text-lg leading-snug">{displayTitle}</h3>
               <p className="text-xs text-teal-200">
-                {schedules.length} {isTe ? 'చెల్లింపు మైలురాళ్ళు' : 'Milestones'}
-                {skipSundays && ` • ${isTe ? 'ఆదివారాలు మినహాయించబడ్డాయి' : 'Sundays Skipped'}`}
+                {schedules.length}{' '}
+                {isTe
+                  ? frequency === 'weekly'
+                    ? 'వారపు వాయిదాలు'
+                    : frequency === 'monthly'
+                    ? 'నెలవారీ వాయిదాలు'
+                    : 'చెల్లింపు మైలురాళ్ళు'
+                  : frequency === 'weekly'
+                  ? 'Weekly Milestones'
+                  : frequency === 'monthly'
+                  ? 'Monthly Milestones'
+                  : 'Milestones'}
+                {frequency === 'daily' && skipSundays && ` • ${isTe ? 'ఆదివారాలు మినహాయించబడ్డాయి' : 'Sundays Skipped'}`}
               </p>
             </div>
           </div>
@@ -169,7 +190,15 @@ export const ScheduleInspectorModal: React.FC<ScheduleInspectorModalProps> = ({
               {isTe ? 'వ్యవధి' : 'Duration'}
             </span>
             <span className="text-xs font-bold text-gray-900 block mt-0.5">
-              {totalCalendarDays ? `${totalCalendarDays} ${isTe ? 'రోజులు' : 'Days'}` : `${schedules.length} ${isTe ? 'వాయిదాలు' : 'Installments'}`}
+              {loanType === 'SP'
+                ? `${schedules.length > 1 ? schedules.length - 1 : schedules.length} ${isTe ? 'నెలలు' : 'Months'}`
+                : frequency === 'weekly'
+                ? `${schedules.length} ${isTe ? 'వారాలు' : 'Weeks'}`
+                : frequency === 'monthly'
+                ? `${schedules.length} ${isTe ? 'నెలలు' : 'Months'}`
+                : totalCalendarDays
+                ? `${totalCalendarDays} ${isTe ? 'రోజులు' : 'Days'}`
+                : `${schedules.length} ${isTe ? 'వాయిదాలు' : 'Installments'}`}
             </span>
           </div>
         </div>
@@ -211,6 +240,20 @@ export const ScheduleInspectorModal: React.FC<ScheduleInspectorModalProps> = ({
             {schedules.map((schedule, idx) => {
               const isSundayDate = isSunday(schedule.dueDate);
               const isPrincipalMaturity = schedule.paymentType === 'principal';
+              // Only highlight Sunday warning if this is a DAILY frequency schedule
+              const isDailySunday = frequency === 'daily' && isSundayDate;
+
+              // Format milestone description in Telugu or English
+              let milestoneDesc = schedule.notes || `${isTe ? 'వాయిదా' : 'Installment'} ${idx + 1}`;
+              if (isTe) {
+                if (schedule.notes?.startsWith('Week ')) {
+                  milestoneDesc = `వారం ${idx + 1} వాయిదా (${idx + 1}/${schedules.length})`;
+                } else if (schedule.notes?.startsWith('Month ')) {
+                  milestoneDesc = `నెల ${idx + 1} వాయిదా (${idx + 1}/${schedules.length})`;
+                } else if (schedule.notes?.startsWith('Installment ')) {
+                  milestoneDesc = `వాయిదా ${idx + 1} (${idx + 1}/${schedules.length})`;
+                }
+              }
 
               return (
                 <div
@@ -218,7 +261,7 @@ export const ScheduleInspectorModal: React.FC<ScheduleInspectorModalProps> = ({
                   className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
                     isPrincipalMaturity
                       ? 'bg-amber-50 border-amber-300 shadow-sm'
-                      : isSundayDate
+                      : isDailySunday
                       ? 'bg-red-50/60 border-red-200'
                       : idx % 2 === 0
                       ? 'bg-white border-gray-200'
@@ -242,7 +285,7 @@ export const ScheduleInspectorModal: React.FC<ScheduleInspectorModalProps> = ({
                         </span>
                       </div>
                       <span className="text-xs text-gray-500 block">
-                        {schedule.notes || `${isTe ? 'వాయిదా' : 'Installment'} ${idx + 1}`}
+                        {milestoneDesc}
                       </span>
                     </div>
                   </div>
@@ -257,7 +300,7 @@ export const ScheduleInspectorModal: React.FC<ScheduleInspectorModalProps> = ({
               );
             })}
 
-            {sundaysSkippedCount > 0 && (
+            {frequency === 'daily' && sundaysSkippedCount > 0 && (
               <div className="mt-3 p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 flex items-center gap-2">
                 <Info size={16} className="text-amber-600 flex-shrink-0" />
                 <span>

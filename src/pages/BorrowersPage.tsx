@@ -1288,6 +1288,7 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
           }}
           isTe={isTe}
           loanType={selectedLoanForInspector.loanType}
+          frequency={selectedLoanForInspector.collectionFrequency || 'daily'}
           schedules={inspectorSchedules}
           principalAmount={selectedLoanForInspector.principalAmount}
           totalAmount={selectedLoanForInspector.totalRepaymentAmount || selectedLoanForInspector.principalAmount}

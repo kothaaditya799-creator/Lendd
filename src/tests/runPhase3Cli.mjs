@@ -97,6 +97,36 @@ async function run() {
   assert('DF Start on Sunday: Advances start to Monday (2026-11-02)', dfStartSun.schedules[0].dueDate === '2026-11-02');
   assert('DF Start on Sunday: Zero installments on Sunday', !dfStartSun.schedules.some((s) => isSunday(s.dueDate)));
 
+  // Test 5b: Weekly DF Schedule (16 weeks)
+  const dfWeekly = generateDFSchedule({
+    loanId: 'df-weekly-16',
+    borrowerId: 'b-1',
+    totalRepayment: 20000,
+    installments: 16,
+    frequency: 'weekly',
+    startDateStr: '2026-11-02', // Monday
+  });
+  const sumWeekly = dfWeekly.schedules.reduce((acc, s) => acc + s.amountDue, 0);
+  assert('DF Weekly: Exactly 16 weekly milestones created', dfWeekly.schedules.length === 16);
+  assert('DF Weekly: Sum matches ₹20,000 exactly', sumWeekly === 20000);
+  assert('DF Weekly: Milestone notes formatted as Week i of 16', dfWeekly.schedules[0].notes === 'Week 1 of 16' && dfWeekly.schedules[15].notes === 'Week 16 of 16');
+  assert('DF Weekly: Installments spaced 7 days apart', dfWeekly.schedules[0].dueDate === '2026-11-02' && dfWeekly.schedules[1].dueDate === '2026-11-09');
+
+  // Test 5c: Monthly DF Schedule (10 months)
+  const dfMonthly = generateDFSchedule({
+    loanId: 'df-monthly-10',
+    borrowerId: 'b-1',
+    totalRepayment: 50000,
+    installments: 10,
+    frequency: 'monthly',
+    startDateStr: '2026-11-05',
+  });
+  const sumMonthly = dfMonthly.schedules.reduce((acc, s) => acc + s.amountDue, 0);
+  assert('DF Monthly: Exactly 10 monthly milestones created', dfMonthly.schedules.length === 10);
+  assert('DF Monthly: Sum matches ₹50,000 exactly', sumMonthly === 50000);
+  assert('DF Monthly: Milestone notes formatted as Month i of 10', dfMonthly.schedules[0].notes === 'Month 1 of 10' && dfMonthly.schedules[9].notes === 'Month 10 of 10');
+  assert('DF Monthly: Milestones advance by calendar month preserving day', dfMonthly.schedules[0].dueDate === '2026-11-05' && dfMonthly.schedules[1].dueDate === '2026-12-05');
+
   // Test 6: Leap Year Math
   assert('Leap Year: 2024 is leap year', isLeapYear(2024));
   assert('Leap Year: 2025 is not leap year', !isLeapYear(2025));

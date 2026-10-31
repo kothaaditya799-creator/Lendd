@@ -134,6 +134,37 @@ export const NewLoanPage: React.FC<NewLoanPageProps> = ({
   const monthlyInterestAmount =
     loanType === 'SP' ? Math.round(principal * (monthlyInterestRate / 100)) : 0;
 
+  // Maximum allowed installments based on selected collection frequency
+  const maxInstallments =
+    frequency === 'daily' ? 999 : frequency === 'weekly' ? 199 : 99;
+
+  // Handle frequency switches with sensible standard defaults and bounds
+  const handleFrequencyChange = (newFreq: 'daily' | 'weekly' | 'monthly') => {
+    setFrequency(newFreq);
+    if (newFreq === 'daily') {
+      // Default to 100 days if previous was non-daily or out of range
+      setInstallments((prev) => (prev > 999 || prev <= 24 ? 100 : prev));
+    } else if (newFreq === 'weekly') {
+      // Default to 16 weeks (~112 days) if previous was 100 or out of range
+      setInstallments((prev) => (prev > 199 || prev === 100 ? 16 : Math.max(1, Math.min(199, prev))));
+    } else if (newFreq === 'monthly') {
+      // Default to 10 months if previous was daily 100 or weekly 16 or out of range
+      setInstallments((prev) => (prev > 99 || prev === 100 || prev === 16 ? 10 : Math.max(1, Math.min(99, prev))));
+    }
+  };
+
+  // Safe clamping for installment input based on limits (1-999 days, 1-199 weeks, 1-99 months)
+  const handleInstallmentsChange = (valStr: string) => {
+    const rawVal = parseInt(valStr.replace(/\D/g, ''), 10);
+    if (isNaN(rawVal) || rawVal < 1) {
+      setInstallments(1);
+    } else if (rawVal > maxInstallments) {
+      setInstallments(maxInstallments);
+    } else {
+      setInstallments(rawVal);
+    }
+  };
+
   // Live calculation for expected end date & summary (including installment days and skip sundays)
   const liveCalculation = useMemo(() => {
     if (loanType === 'DF') {
@@ -476,7 +507,7 @@ export const NewLoanPage: React.FC<NewLoanPageProps> = ({
                   <button
                     key={freq}
                     type="button"
-                    onClick={() => setFrequency(freq)}
+                    onClick={() => handleFrequencyChange(freq)}
                     className={`min-h-[44px] rounded-xl text-xs font-bold capitalize transition-all ${
                       frequency === freq
                         ? 'bg-brand-700 text-white shadow-sm'
@@ -495,36 +526,74 @@ export const NewLoanPage: React.FC<NewLoanPageProps> = ({
               </div>
             </div>
 
-            {/* Installments count & Skip Sundays Toggle */}
+            {/* Installments count & Skip Sundays Toggle / Cadence Info */}
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-xs font-semibold text-slate-500 mb-1">
-                  {isTe ? 'రోజుల సంఖ్య (వాయిదాలు)' : 'Installments (Days):'}
+                  {isTe
+                    ? frequency === 'daily'
+                      ? 'రోజుల సంఖ్య (వాయిదాలు)'
+                      : frequency === 'weekly'
+                      ? 'వారాల సంఖ్య (వాయిదాలు)'
+                      : 'నెలల సంఖ్య (వాయిదాలు)'
+                    : frequency === 'daily'
+                    ? 'Days (Installments):'
+                    : frequency === 'weekly'
+                    ? 'Weeks (Installments):'
+                    : 'Months (Installments):'}
                 </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={365}
-                  value={installments}
-                  onChange={(e) => setInstallments(parseInt(e.target.value, 10) || 1)}
-                  className="w-full min-h-[56px] px-4 bg-slate-50 border border-slate-200 rounded-2xl text-base font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                />
+                <div className="relative">
+                  <input
+                    type="number"
+                    min={1}
+                    max={maxInstallments}
+                    value={installments}
+                    onChange={(e) => handleInstallmentsChange(e.target.value)}
+                    className="w-full min-h-[56px] px-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-base font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-600 focus:border-teal-600"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
+                    max {maxInstallments}
+                  </span>
+                </div>
               </div>
 
-              {/* Sunday Toggle */}
+              {/* Sunday Toggle (Daily) or Frequency Cadence Badge (Weekly / Monthly) */}
               <div className="flex flex-col justify-end">
-                <button
-                  type="button"
-                  onClick={() => setSkipSundays(!skipSundays)}
-                  className={`min-h-[56px] px-3 rounded-2xl border-2 text-xs font-bold flex items-center justify-center space-x-1 transition-all ${
-                    skipSundays
-                      ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
-                      : 'border-slate-200 bg-slate-50 text-slate-600'
-                  }`}
-                >
-                  <Calendar className="h-4 w-4" />
-                  <span>{isTe ? (skipSundays ? 'ఆదివారం సెలవు ✓' : 'ప్రతిరోజూ') : (skipSundays ? 'Skip Sundays ✓' : 'Every Day')}</span>
-                </button>
+                {frequency === 'daily' ? (
+                  <button
+                    type="button"
+                    onClick={() => setSkipSundays(!skipSundays)}
+                    className={`min-h-[56px] px-3 rounded-2xl border-2 text-xs font-bold flex items-center justify-center space-x-1.5 transition-all ${
+                      skipSundays
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
+                        : 'border-slate-200 bg-slate-50 text-slate-600'
+                    }`}
+                  >
+                    <Calendar className="h-4 w-4" />
+                    <span>
+                      {isTe
+                        ? skipSundays
+                          ? 'ఆదివారం సెలవు ✓'
+                          : 'ప్రతిరోజూ'
+                        : skipSundays
+                        ? 'Skip Sundays ✓'
+                        : 'Every Day'}
+                    </span>
+                  </button>
+                ) : (
+                  <div className="min-h-[56px] px-3 rounded-2xl border-2 border-teal-200 bg-teal-50/70 text-teal-900 text-xs font-bold flex items-center justify-center space-x-2">
+                    <Calendar className="h-4 w-4 text-teal-600" />
+                    <span>
+                      {isTe
+                        ? frequency === 'weekly'
+                          ? 'ప్రతి వారం వాయిదా'
+                          : 'ప్రతి నెల వాయిదా'
+                        : frequency === 'weekly'
+                        ? 'Weekly Cadence'
+                        : 'Monthly Cadence'}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -533,16 +602,50 @@ export const NewLoanPage: React.FC<NewLoanPageProps> = ({
               <div className="flex items-center justify-between pb-2 border-b border-teal-200/60">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider text-teal-800">
-                    {isTe ? 'రోజువారీ వసూలు' : 'Daily Collection'}
+                    {isTe
+                      ? frequency === 'daily'
+                        ? 'రోజువారీ వసూలు'
+                        : frequency === 'weekly'
+                        ? 'వారపు వసూలు'
+                        : 'నెలవారీ వసూలు'
+                      : frequency === 'daily'
+                      ? 'Daily Collection'
+                      : frequency === 'weekly'
+                      ? 'Weekly Collection'
+                      : 'Monthly Collection'}
                   </p>
                   <p className="text-2xl font-black text-teal-950 mt-0.5">
                     ₹{dailyInstallment.toLocaleString('en-IN')}{' '}
-                    <span className="text-xs font-normal text-teal-700">/ రోజుకి</span>
+                    <span className="text-xs font-normal text-teal-700">
+                      /{' '}
+                      {isTe
+                        ? frequency === 'daily'
+                          ? 'రోజుకి'
+                          : frequency === 'weekly'
+                          ? 'వారానికి'
+                          : 'నెలకు'
+                        : frequency === 'daily'
+                        ? 'day'
+                        : frequency === 'weekly'
+                        ? 'week'
+                        : 'month'}
+                    </span>
                   </p>
                 </div>
                 <div className="text-right">
                   <p className="text-xs font-semibold text-teal-800">
-                    {installments} {isTe ? 'వాయిదాలు' : 'installments'}
+                    {installments}{' '}
+                    {isTe
+                      ? frequency === 'daily'
+                        ? 'వాయిదాలు (రోజులు)'
+                        : frequency === 'weekly'
+                        ? 'వాయిదాలు (వారాలు)'
+                        : 'వాయిదాలు (నెలలు)'
+                      : frequency === 'daily'
+                      ? 'installments (days)'
+                      : frequency === 'weekly'
+                      ? 'installments (weeks)'
+                      : 'installments (months)'}
                   </p>
                   <p className="text-xs font-bold text-teal-900 mt-1">
                     {isTe ? 'లాభం: ' : 'Profit: '}₹{(totalRepayment - principal).toLocaleString('en-IN')}
@@ -569,10 +672,18 @@ export const NewLoanPage: React.FC<NewLoanPageProps> = ({
                 <div className="flex items-center justify-between text-[11px] font-semibold text-teal-900 pt-1">
                   <span>
                     {isTe
-                      ? `మొత్తం వ్యవధి: ${liveCalculation.totalCalendarDays} రోజులు`
-                      : `Total Duration: ${liveCalculation.totalCalendarDays} calendar days`}
+                      ? frequency === 'daily'
+                        ? `మొత్తం వ్యవధి: ${liveCalculation.totalCalendarDays} రోజులు`
+                        : frequency === 'weekly'
+                        ? `మొత్తం వ్యవధి: ${installments} వారాలు (${liveCalculation.totalCalendarDays} రోజులు)`
+                        : `మొత్తం వ్యవధి: ${installments} నెలలు (${liveCalculation.totalCalendarDays} రోజులు)`
+                      : frequency === 'daily'
+                      ? `Total Duration: ${liveCalculation.totalCalendarDays} calendar days`
+                      : frequency === 'weekly'
+                      ? `Total Duration: ${installments} weeks (${liveCalculation.totalCalendarDays} calendar days)`
+                      : `Total Duration: ${installments} months (${liveCalculation.totalCalendarDays} calendar days)`}
                   </span>
-                  {skipSundays && liveCalculation.sundaysSkippedCount > 0 && (
+                  {frequency === 'daily' && skipSundays && liveCalculation.sundaysSkippedCount > 0 && (
                     <span className="bg-teal-200/80 text-teal-950 px-2 py-0.5 rounded-full font-bold">
                       {isTe
                         ? `${liveCalculation.sundaysSkippedCount} ఆదివారాలు సెలవు ✓`
@@ -679,8 +790,24 @@ export const NewLoanPage: React.FC<NewLoanPageProps> = ({
           <Eye className="h-5 w-5 text-teal-700" />
           <span>
             {isTe
-              ? `వాయిదాల షెడ్యూల్ పరిశీలించండి (${loanType === 'DF' ? `${installments} రోజులు` : `${interestCycles} నెలలు`})`
-              : `Inspect Schedule (${loanType === 'DF' ? `${installments} Days` : `${interestCycles} Months`})`}
+              ? `వాయిదాల షెడ్యూల్ పరిశీలించండి (${
+                  loanType === 'DF'
+                    ? frequency === 'weekly'
+                      ? `${installments} వారాలు`
+                      : frequency === 'monthly'
+                      ? `${installments} నెలలు`
+                      : `${installments} రోజులు`
+                    : `${interestCycles} నెలలు`
+                })`
+              : `Inspect Schedule (${
+                  loanType === 'DF'
+                    ? frequency === 'weekly'
+                      ? `${installments} Weeks`
+                      : frequency === 'monthly'
+                      ? `${installments} Months`
+                      : `${installments} Days`
+                    : `${interestCycles} Months`
+                })`}
           </span>
         </button>
 
@@ -707,6 +834,7 @@ export const NewLoanPage: React.FC<NewLoanPageProps> = ({
         onClose={() => setIsPreviewOpen(false)}
         isTe={isTe}
         loanType={loanType}
+        frequency={frequency}
         schedules={previewSchedules}
         principalAmount={principal}
         totalAmount={loanType === 'DF' ? totalRepayment : principal}

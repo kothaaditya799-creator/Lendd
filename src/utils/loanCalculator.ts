@@ -92,8 +92,11 @@ export function generateDFSchedule(params: GenerateDFScheduleParams): GenerateDF
   let currentDateStr = startDateStr;
   let sundaysSkippedCount = 0;
 
+  // Sundays are only skipped for DAILY collection frequency
+  const shouldSkipSundays = skipSundays && frequency === 'daily';
+
   // If daily and starts on a Sunday with skipSundays enabled, advance to Monday
-  if (skipSundays && frequency === 'daily' && isSunday(currentDateStr)) {
+  if (shouldSkipSundays && isSunday(currentDateStr)) {
     currentDateStr = addDays(currentDateStr, 1);
     sundaysSkippedCount++;
   }
@@ -102,7 +105,7 @@ export function generateDFSchedule(params: GenerateDFScheduleParams): GenerateDF
 
   for (let i = 1; i <= installments; i++) {
     // If daily frequency with skipSundays, verify current day is not Sunday
-    if (skipSundays && frequency === 'daily' && isSunday(currentDateStr)) {
+    if (shouldSkipSundays && isSunday(currentDateStr)) {
       currentDateStr = addDays(currentDateStr, 1);
       sundaysSkippedCount++;
     }
@@ -111,6 +114,13 @@ export function generateDFSchedule(params: GenerateDFScheduleParams): GenerateDF
     // On the final installment, balance out any minor rounding difference to guarantee exact match
     const amountDue = isLast ? totalRepayment - allocatedTotal : baseInstallment;
     allocatedTotal += amountDue;
+
+    const milestoneNote =
+      frequency === 'weekly'
+        ? `Week ${i} of ${installments}`
+        : frequency === 'monthly'
+        ? `Month ${i} of ${installments}`
+        : `Installment ${i} of ${installments}`;
 
     schedules.push({
       id: generateUUID(),
@@ -122,7 +132,7 @@ export function generateDFSchedule(params: GenerateDFScheduleParams): GenerateDF
       amountPaid: 0,
       paymentType: 'installment',
       status: 'pending',
-      notes: `Installment ${i} of ${installments}`,
+      notes: milestoneNote,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
@@ -131,15 +141,12 @@ export function generateDFSchedule(params: GenerateDFScheduleParams): GenerateDF
     if (i < installments) {
       if (frequency === 'daily') {
         currentDateStr = addDays(currentDateStr, 1);
-        if (skipSundays && isSunday(currentDateStr)) {
+        if (shouldSkipSundays && isSunday(currentDateStr)) {
           currentDateStr = addDays(currentDateStr, 1);
           sundaysSkippedCount++;
         }
       } else if (frequency === 'weekly') {
         currentDateStr = addDays(currentDateStr, 7);
-        if (skipSundays && isSunday(currentDateStr)) {
-          currentDateStr = addDays(currentDateStr, 1);
-        }
       } else if (frequency === 'monthly') {
         currentDateStr = addMonthsPreservingDay(startDateStr, i);
       }
