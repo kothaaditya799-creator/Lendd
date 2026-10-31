@@ -60,7 +60,7 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
   const [editGuarantorPhone, setEditGuarantorPhone] = useState('');
   const [editAddress, setEditAddress] = useState('');
   const [editFormError, setEditFormError] = useState<string | null>(null);
-  const [isConfirmingEdit, setIsConfirmingEdit] = useState(false);
+  const [isEditConfirmationOpen, setIsEditConfirmationOpen] = useState(false);
 
   // Delete Borrower Modal State (2-Step Safety Gate)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -124,7 +124,7 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
     setEditGuarantorPhone(selectedBorrower.guarantorPhone || '');
     setEditAddress(selectedBorrower.address || '');
     setEditFormError(null);
-    setIsConfirmingEdit(false);
+    setIsEditConfirmationOpen(false);
     setIsEditModalOpen(true);
   };
 
@@ -184,8 +184,8 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
     }
   };
 
-  // Save Edit Changes
-  const handleSaveEdit = async (e: React.FormEvent) => {
+  // Validate and open edit confirmation pop-up card
+  const handleSaveEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedBorrower) return;
 
@@ -193,7 +193,6 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
 
     const trimmedName = editName.trim();
     const cleanPhone = editPhone.replace(/\D/g, '');
-    const cleanGuarantorPhone = editGuarantorPhone.replace(/\D/g, '') || undefined;
 
     if (!trimmedName || trimmedName.length < 2) {
       setEditFormError(
@@ -213,13 +212,18 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
       return;
     }
 
-    if (!isConfirmingEdit) {
-      // Step 1: Prompt for confirmation
-      setIsConfirmingEdit(true);
-      return;
-    }
+    // Open confirmation pop-up card
+    setIsEditConfirmationOpen(true);
+  };
 
-    // Step 2: Execute Update
+  // Execute Edit on User Confirmation
+  const handleExecuteEdit = async () => {
+    if (!selectedBorrower || isSubmitting) return;
+
+    const trimmedName = editName.trim();
+    const cleanPhone = editPhone.replace(/\D/g, '');
+    const cleanGuarantorPhone = editGuarantorPhone.replace(/\D/g, '') || undefined;
+
     setIsSubmitting(true);
     try {
       const updated = await borrowerRepo.updateBorrower(selectedBorrower.id, {
@@ -231,17 +235,17 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
       });
 
       setSelectedBorrower(updated);
+      setIsEditConfirmationOpen(false);
       setIsEditModalOpen(false);
-      setIsConfirmingEdit(false);
       setSuccessToast(
         isTe
-          ? '✓ వివరాలు విజయవంతంగా నవీకరించబడ్డాయి!'
-          : '✓ Borrower details updated successfully!'
+          ? '✓ రుణగ్రహీత వివరాలు విజయవంతంగా మార్చబడ్డాయి!'
+          : '✓ Borrower details are edited successfully!'
       );
       await loadBorrowers();
     } catch (err: unknown) {
       setEditFormError(err instanceof Error ? err.message : 'Update failed');
-      setIsConfirmingEdit(false);
+      setIsEditConfirmationOpen(false);
     } finally {
       setIsSubmitting(false);
     }
@@ -632,7 +636,7 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
               <button
                 onClick={() => {
                   setIsEditModalOpen(false);
-                  setIsConfirmingEdit(false);
+                  setIsEditConfirmationOpen(false);
                 }}
                 className="flex h-10 w-10 items-center justify-center rounded-full text-slate-400 hover:text-slate-600 active:scale-95"
               >
@@ -647,21 +651,6 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
               </div>
             )}
 
-            {/* Confirmation Banner if in confirm step */}
-            {isConfirmingEdit && (
-              <div className="rounded-2xl bg-amber-50 p-4 text-sm font-bold text-amber-900 border border-amber-200 flex items-start space-x-2">
-                <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <p>{isTe ? 'మార్పులను నిర్ధారించండి:' : 'Confirm Updates:'}</p>
-                  <p className="text-xs font-normal text-amber-800 mt-1">
-                    {isTe
-                      ? `మీరు ${selectedBorrower.name} వివరాలను అప్‌డేట్ చేయాలనుకుంటున్నారా?`
-                      : `Are you sure you want to save changes for ${selectedBorrower.name}?`}
-                  </p>
-                </div>
-              </div>
-            )}
-
             <form onSubmit={handleSaveEdit} className="space-y-4">
               {/* Name Field (56px) */}
               <div>
@@ -672,10 +661,7 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
                   type="text"
                   required
                   value={editName}
-                  onChange={(e) => {
-                    setEditName(e.target.value);
-                    setIsConfirmingEdit(false);
-                  }}
+                  onChange={(e) => setEditName(e.target.value)}
                   className="w-full min-h-[56px] px-4 bg-slate-50 border border-slate-200 rounded-2xl text-base focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </div>
@@ -695,10 +681,7 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
                     required
                     maxLength={10}
                     value={editPhone}
-                    onChange={(e) => {
-                      setEditPhone(e.target.value.replace(/\D/g, ''));
-                      setIsConfirmingEdit(false);
-                    }}
+                    onChange={(e) => setEditPhone(e.target.value.replace(/\D/g, ''))}
                     className="w-full min-h-[56px] pl-16 pr-4 bg-slate-50 border border-slate-200 rounded-2xl text-lg font-bold tracking-wider focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                   />
                 </div>
@@ -712,10 +695,7 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
                 <input
                   type="text"
                   value={editGuarantorName}
-                  onChange={(e) => {
-                    setEditGuarantorName(e.target.value);
-                    setIsConfirmingEdit(false);
-                  }}
+                  onChange={(e) => setEditGuarantorName(e.target.value)}
                   placeholder={isTe ? 'హామీదారు పేరు' : 'Guarantor Name'}
                   className="w-full min-h-[56px] px-4 bg-slate-50 border border-slate-200 rounded-2xl text-base focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
@@ -724,10 +704,7 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
                   inputMode="numeric"
                   maxLength={10}
                   value={editGuarantorPhone}
-                  onChange={(e) => {
-                    setEditGuarantorPhone(e.target.value.replace(/\D/g, ''));
-                    setIsConfirmingEdit(false);
-                  }}
+                  onChange={(e) => setEditGuarantorPhone(e.target.value.replace(/\D/g, ''))}
                   placeholder={isTe ? 'హామీదారు 10-అంకెల ఫోన్ నంబర్' : 'Guarantor 10-digit Phone'}
                   className="w-full min-h-[56px] px-4 bg-slate-50 border border-slate-200 rounded-2xl text-base font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
@@ -741,41 +718,64 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
                 <textarea
                   rows={2}
                   value={editAddress}
-                  onChange={(e) => {
-                    setEditAddress(e.target.value);
-                    setIsConfirmingEdit(false);
-                  }}
+                  onChange={(e) => setEditAddress(e.target.value)}
                   className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-base focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </div>
 
-              {/* Submit / Confirm Button */}
-              <div className="flex space-x-2">
-                {isConfirmingEdit && (
-                  <button
-                    type="button"
-                    onClick={() => setIsConfirmingEdit(false)}
-                    className="flex-1 min-h-[56px] rounded-2xl border border-slate-300 bg-slate-100 font-bold text-slate-700"
-                  >
-                    {isTe ? 'రద్దు' : 'Cancel'}
-                  </button>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className={`flex-1 min-h-[56px] rounded-2xl font-bold text-lg shadow-lg active:scale-95 transition-all text-white ${
-                    isConfirmingEdit ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-brand-700 hover:bg-brand-800'
-                  }`}
-                >
-                  {isSubmitting
-                    ? isTe ? 'సేవ్ చేస్తోంది...' : 'Saving...'
-                    : isConfirmingEdit
-                    ? isTe ? '✓ అవును, నిర్ధారించు' : '✓ Confirm Update'
-                    : isTe ? 'మార్పులను సేవ్ చేయి' : 'Save Changes'}
-                </button>
-              </div>
+              {/* Submit Button (56px) */}
+              <button
+                type="submit"
+                className="w-full min-h-[56px] rounded-2xl bg-teal-800 hover:bg-teal-700 active:bg-teal-900 font-bold text-lg text-white shadow-lg active:scale-95 transition-all flex items-center justify-center space-x-2"
+              >
+                <span>{isTe ? 'మార్పులను సేవ్ చేయి' : 'Save Changes'}</span>
+              </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          EDIT BORROWER CONFIRMATION POP-UP CARD
+          ========================================================================= */}
+      {isEditConfirmationOpen && selectedBorrower && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl border border-gray-100 space-y-4 animate-scale-up text-center">
+            <div className="w-16 h-16 rounded-full bg-teal-50 text-teal-800 border-2 border-teal-200 flex items-center justify-center mx-auto shadow-sm">
+              <Edit3 size={28} />
+            </div>
+
+            <div>
+              <h3 className="text-lg font-extrabold text-gray-900 leading-snug">
+                {isTe ? 'వివరాలను మార్చాలనుకుంటున్నారా?' : 'Are you sure you want to edit details?'}
+              </h3>
+              <p className="text-xs font-semibold text-gray-500 mt-2 leading-relaxed">
+                {isTe
+                  ? `మీరు "${selectedBorrower.name}" ఖాతా వివరాలను అప్‌డేట్ చేయబోతున్నారు.`
+                  : `You are about to update details for "${selectedBorrower.name}".`}
+              </p>
+            </div>
+
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsEditConfirmationOpen(false)}
+                className="flex-1 min-h-[56px] rounded-2xl border-2 border-slate-200 bg-slate-50 hover:bg-slate-100 font-bold text-slate-700 text-base transition-colors"
+              >
+                {isTe ? 'రద్దు' : 'Cancel'}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExecuteEdit}
+                disabled={isSubmitting}
+                className="flex-1 min-h-[56px] rounded-2xl bg-teal-800 hover:bg-teal-700 active:bg-teal-900 font-bold text-white text-base shadow-lg transition-colors flex items-center justify-center gap-1.5"
+              >
+                {isSubmitting
+                  ? isTe ? 'సేవ్ చేస్తోంది...' : 'Saving...'
+                  : isTe ? '✓ అవును, మార్చు' : '✓ Yes, Edit'}
+              </button>
+            </div>
           </div>
         </div>
       )}
