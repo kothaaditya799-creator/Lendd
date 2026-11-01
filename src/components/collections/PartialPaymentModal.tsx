@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Check, AlertCircle, RotateCcw } from 'lucide-react';
+import { X, Check, AlertCircle } from 'lucide-react';
 import { formatINR } from '../../utils/currency';
 
 interface PartialPaymentModalProps {
@@ -12,7 +12,6 @@ interface PartialPaymentModalProps {
   initialAmount?: number;
   currentStatus?: 'pending' | 'paid' | 'partial' | 'missed';
   onConfirm: (amount: number, notes?: string) => Promise<void>;
-  onResetToPending?: () => Promise<void>;
 }
 
 export const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
@@ -25,7 +24,6 @@ export const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
   initialAmount = 0,
   currentStatus,
   onConfirm,
-  onResetToPending,
 }) => {
   const [amountStr, setAmountStr] = useState<string>(
     initialAmount > 0 ? initialAmount.toString() : ''
@@ -148,9 +146,16 @@ export const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
 
           {/* Cash Input */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-              {isTe ? 'వసూలైన నగదు మొత్తం (రూపాయల్లో) *' : 'Cash Collected Amount (Rupees) *'}
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                {isTe ? 'వసూలైన నగదు మొత్తం (రూపాయల్లో) *' : 'Cash Collected Amount (Rupees) *'}
+              </label>
+              {initialAmount > 0 && currentStatus && currentStatus !== 'pending' && (
+                <span className="text-[11px] font-bold text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+                  {isTe ? `గతంలో: ₹${initialAmount.toLocaleString('en-IN')}` : `Previous: ₹${initialAmount.toLocaleString('en-IN')}`}
+                </span>
+              )}
+            </div>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-bold text-slate-400">
                 ₹
@@ -237,33 +242,6 @@ export const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
               </>
             )}
           </button>
-
-          {/* Reset to Pending / Mistake Correction Button */}
-          {onResetToPending && currentStatus && currentStatus !== 'pending' && (
-            <button
-              type="button"
-              disabled={isSubmitting}
-              onClick={async () => {
-                setIsSubmitting(true);
-                try {
-                  await onResetToPending();
-                  onClose();
-                } catch (err) {
-                  setError(err instanceof Error ? err.message : 'Failed to reset milestone');
-                } finally {
-                  setIsSubmitting(false);
-                }
-              }}
-              className="w-full min-h-[52px] rounded-2xl border-2 border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-800 font-bold text-sm transition-all flex items-center justify-center space-x-2 active:scale-95"
-            >
-              <RotateCcw size={16} />
-              <span>
-                {isTe
-                  ? 'బాకీగా రీసెట్ చేయి (Reset to Pending Queue)'
-                  : 'Undo & Reset to Pending Queue'}
-              </span>
-            </button>
-          )}
         </form>
       </div>
     </div>

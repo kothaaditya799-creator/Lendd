@@ -783,7 +783,6 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
           initialAmount={modalItem.schedule.amountPaid || 0}
           currentStatus={modalItem.schedule.status}
           onConfirm={handleConfirmPartialPayment}
-          onResetToPending={() => handleResetToPending(modalItem)}
         />
       )}
     </div>
