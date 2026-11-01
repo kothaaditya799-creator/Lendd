@@ -89,16 +89,25 @@ export function generateDFSchedule(params: GenerateDFScheduleParams): GenerateDF
   const baseInstallment = Math.round(totalRepayment / installments);
   const schedules: PaymentSchedule[] = [];
 
-  let currentDateStr = startDateStr;
   let sundaysSkippedCount = 0;
-
-  // Sundays are only skipped for DAILY collection frequency
   const shouldSkipSundays = skipSundays && frequency === 'daily';
 
-  // If daily and starts on a Sunday with skipSundays enabled, advance to Monday
-  if (shouldSkipSundays && isSunday(currentDateStr)) {
-    currentDateStr = addDays(currentDateStr, 1);
-    sundaysSkippedCount++;
+  // In informal and street lending, collections begin on the NEXT cycle:
+  // - Daily loans start on the next day (startDateStr + 1 day)
+  // - Weekly loans start next week (startDateStr + 7 days)
+  // - Monthly loans start next month (startDateStr + 1 month)
+  let currentDateStr: string;
+  if (frequency === 'daily') {
+    currentDateStr = addDays(startDateStr, 1);
+    if (shouldSkipSundays && isSunday(currentDateStr)) {
+      currentDateStr = addDays(currentDateStr, 1);
+      sundaysSkippedCount++;
+    }
+  } else if (frequency === 'weekly') {
+    currentDateStr = addDays(startDateStr, 7);
+  } else {
+    // monthly
+    currentDateStr = addMonthsPreservingDay(startDateStr, 1);
   }
 
   let allocatedTotal = 0;
@@ -148,7 +157,7 @@ export function generateDFSchedule(params: GenerateDFScheduleParams): GenerateDF
       } else if (frequency === 'weekly') {
         currentDateStr = addDays(currentDateStr, 7);
       } else if (frequency === 'monthly') {
-        currentDateStr = addMonthsPreservingDay(startDateStr, i);
+        currentDateStr = addMonthsPreservingDay(startDateStr, i + 1);
       }
     }
   }
@@ -156,10 +165,10 @@ export function generateDFSchedule(params: GenerateDFScheduleParams): GenerateDF
   const finalSchedule = schedules[schedules.length - 1];
   const endDate = finalSchedule?.dueDate || startDateStr;
 
-  // Calculate calendar days duration
+  // Calculate calendar days duration from loan disbursement date to maturity
   const startMs = parseISODate(startDateStr).getTime();
   const endMs = parseISODate(endDate).getTime();
-  const totalCalendarDays = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)) + 1);
+  const totalCalendarDays = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
 
   return {
     schedules,

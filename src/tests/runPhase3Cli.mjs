@@ -110,7 +110,7 @@ async function run() {
   assert('DF Weekly: Exactly 16 weekly milestones created', dfWeekly.schedules.length === 16);
   assert('DF Weekly: Sum matches ₹20,000 exactly', sumWeekly === 20000);
   assert('DF Weekly: Milestone notes formatted as Week i of 16', dfWeekly.schedules[0].notes === 'Week 1 of 16' && dfWeekly.schedules[15].notes === 'Week 16 of 16');
-  assert('DF Weekly: Installments spaced 7 days apart', dfWeekly.schedules[0].dueDate === '2026-11-02' && dfWeekly.schedules[1].dueDate === '2026-11-09');
+  assert('DF Weekly: Installments start next week (2026-11-09) and spaced 7 days apart', dfWeekly.schedules[0].dueDate === '2026-11-09' && dfWeekly.schedules[1].dueDate === '2026-11-16');
 
   // Test 5c: Monthly DF Schedule (10 months)
   const dfMonthly = generateDFSchedule({
@@ -125,7 +125,7 @@ async function run() {
   assert('DF Monthly: Exactly 10 monthly milestones created', dfMonthly.schedules.length === 10);
   assert('DF Monthly: Sum matches ₹50,000 exactly', sumMonthly === 50000);
   assert('DF Monthly: Milestone notes formatted as Month i of 10', dfMonthly.schedules[0].notes === 'Month 1 of 10' && dfMonthly.schedules[9].notes === 'Month 10 of 10');
-  assert('DF Monthly: Milestones advance by calendar month preserving day', dfMonthly.schedules[0].dueDate === '2026-11-05' && dfMonthly.schedules[1].dueDate === '2026-12-05');
+  assert('DF Monthly: Milestones start next month (2026-12-05) preserving day', dfMonthly.schedules[0].dueDate === '2026-12-05' && dfMonthly.schedules[1].dueDate === '2027-01-05');
 
   // Test 6: Leap Year Math
   assert('Leap Year: 2024 is leap year', isLeapYear(2024));

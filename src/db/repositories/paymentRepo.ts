@@ -1,5 +1,5 @@
 import { db } from '../dexie';
-import { PaymentSchedule, PaymentScheduleSchema, SyncQueueItem } from '../../types/domain';
+import { PaymentSchedule, PaymentScheduleSchema, LoanSchema, SyncQueueItem } from '../../types/domain';
 
 export interface RecordPaymentInput {
   scheduleId: string;
@@ -124,11 +124,14 @@ export class PaymentRepository {
         ...loan,
         totalCollected: newTotalCollected,
         outstandingBalance: newOutstanding,
-        status: isLoanFullyPaid ? ('completed' as const) : loan.status,
+        status: isLoanFullyPaid 
+          ? ('completed' as const) 
+          : (loan.status === 'completed' ? ('active' as const) : loan.status),
         lastCollectionDate: updatedSchedule.dueDate,
         updatedAt: new Date().toISOString(),
       };
 
+      LoanSchema.parse(updatedLoan);
       await db.loans.put(updatedLoan);
 
       // 7. Atomic Sync Queue Records (Singular table name matching Supabase DDL)

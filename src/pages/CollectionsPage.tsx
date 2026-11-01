@@ -49,8 +49,16 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
   // Partial Payment Modal State
   const [modalItem, setModalItem] = useState<CollectionItem | null>(null);
 
-  // Toast State
+  // Tap Debounce & Processing Lock (Swiss Cheese Layer 3)
+  const [processingId, setProcessingId] = useState<string | null>(null);
+
+  // Undo State & Toast State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [lastAction, setLastAction] = useState<{
+    scheduleId: string;
+    previousAmount: number;
+    notes?: string;
+  } | null>(null);
 
   // Fetch Collections for the selected date
   const loadCollections = useCallback(async () => {
@@ -108,9 +116,36 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
   const handleNextDay = () => setSelectedDate((prev) => addDays(prev, 1));
   const handleToday = () => setSelectedDate(todayIso);
 
-  // 1-Tap Full Payment
-  const handleMarkFullPaid = async (item: CollectionItem) => {
+  // 1-Tap Undo Action Handler
+  const handleUndo = async () => {
+    if (!lastAction) return;
     try {
+      await paymentRepo.recordPayment({
+        scheduleId: lastAction.scheduleId,
+        collectedAmount: lastAction.previousAmount,
+        notes: lastAction.notes,
+      });
+      setToastMessage(isTe ? '✓ చర్య రద్దు చేయబడింది (Action Undone)' : '✓ Action Undone');
+      setLastAction(null);
+      await loadCollections();
+    } catch (err) {
+      console.error('Undo failed:', err);
+    }
+  };
+
+  // 1-Tap Full Payment (Debounced & Guarded)
+  const handleMarkFullPaid = async (item: CollectionItem) => {
+    if (processingId) return;
+    setProcessingId(item.schedule.id);
+
+    try {
+      // Save state for undo
+      setLastAction({
+        scheduleId: item.schedule.id,
+        previousAmount: item.schedule.amountPaid || 0,
+        notes: item.schedule.notes,
+      });
+
       await paymentRepo.recordPayment({
         scheduleId: item.schedule.id,
         collectedAmount: item.schedule.amountDue,
@@ -126,12 +161,24 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
       await loadCollections();
     } catch (err) {
       setToastMessage(err instanceof Error ? `⚠️ ${err.message}` : 'Failed to record payment');
+    } finally {
+      setProcessingId(null);
     }
   };
 
-  // Mark Missed Payment
+  // Mark Missed Payment (Debounced & Guarded)
   const handleMarkMissed = async (item: CollectionItem) => {
+    if (processingId) return;
+    setProcessingId(item.schedule.id);
+
     try {
+      // Save state for undo
+      setLastAction({
+        scheduleId: item.schedule.id,
+        previousAmount: item.schedule.amountPaid || 0,
+        notes: item.schedule.notes,
+      });
+
       await paymentRepo.recordPayment({
         scheduleId: item.schedule.id,
         collectedAmount: 0,
@@ -147,26 +194,40 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
       await loadCollections();
     } catch (err) {
       setToastMessage(err instanceof Error ? `⚠️ ${err.message}` : 'Failed to update milestone');
+    } finally {
+      setProcessingId(null);
     }
   };
 
-  // Submit Partial Payment from Modal
+  // Submit Partial Payment from Modal (Debounced & Guarded)
   const handleConfirmPartialPayment = async (amount: number, notes?: string) => {
-    if (!modalItem) return;
+    if (!modalItem || processingId) return;
+    setProcessingId(modalItem.schedule.id);
 
-    await paymentRepo.recordPayment({
-      scheduleId: modalItem.schedule.id,
-      collectedAmount: amount,
-      notes: notes || modalItem.schedule.notes,
-    });
+    try {
+      // Save state for undo
+      setLastAction({
+        scheduleId: modalItem.schedule.id,
+        previousAmount: modalItem.schedule.amountPaid || 0,
+        notes: modalItem.schedule.notes,
+      });
 
-    setToastMessage(
-      isTe
-        ? `✓ ${modalItem.borrower.name}: ₹${amount.toLocaleString('en-IN')} వసూలు నమోదైంది!`
-        : `✓ ${modalItem.borrower.name}: ₹${amount.toLocaleString('en-IN')} partial payment recorded!`
-    );
+      await paymentRepo.recordPayment({
+        scheduleId: modalItem.schedule.id,
+        collectedAmount: amount,
+        notes: notes || modalItem.schedule.notes,
+      });
 
-    await loadCollections();
+      setToastMessage(
+        isTe
+          ? `✓ ${modalItem.borrower.name}: ₹${amount.toLocaleString('en-IN')} వసూలు నమోదైంది!`
+          : `✓ ${modalItem.borrower.name}: ₹${amount.toLocaleString('en-IN')} partial payment recorded!`
+      );
+
+      await loadCollections();
+    } finally {
+      setProcessingId(null);
+    }
   };
 
   // Metrics Calculations
@@ -211,26 +272,31 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
 
   return (
     <div className="p-4 space-y-4">
-      {/* Toast Notification */}
-      <Toast message={toastMessage} onClose={() => setToastMessage(null)} />
+      {/* Toast Notification with 1-Tap Undo */}
+      <Toast
+        message={toastMessage}
+        onClose={() => setToastMessage(null)}
+        onUndo={lastAction ? handleUndo : undefined}
+        undoLabel={isTe ? 'రద్దు చేయి (Undo)' : 'Undo'}
+      />
 
       {/* Date Navigator Header Card */}
       <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-200 space-y-2">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-1.5">
+          <div className="flex items-center space-x-2">
             <button
               onClick={handlePrevDay}
-              className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+              className="w-12 h-12 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
               aria-label="Previous Day"
             >
-              <ChevronLeft size={20} />
+              <ChevronLeft size={22} />
             </button>
             <button
               onClick={handleNextDay}
-              className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+              className="w-12 h-12 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
               aria-label="Next Day"
             >
-              <ChevronRight size={20} />
+              <ChevronRight size={22} />
             </button>
           </div>
 
@@ -254,14 +320,14 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
             {!isSelectedDateToday ? (
               <button
                 onClick={handleToday}
-                className="min-h-[40px] px-3 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1"
+                className="min-h-[48px] px-3.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
               >
-                <Calendar size={14} />
+                <Calendar size={16} />
                 <span>{isTe ? 'ఈరోజు' : 'Today'}</span>
               </button>
             ) : (
-              <label className="min-h-[40px] px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer">
-                <Calendar size={14} />
+              <label className="min-h-[48px] px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer">
+                <Calendar size={16} />
                 <span>{isTe ? 'తేదీ' : 'Date'}</span>
                 <input
                   type="date"
@@ -348,7 +414,7 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
       </div>
 
       {/* Status Filter Chips */}
-      <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs font-bold">
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none text-xs font-bold">
         {[
           { id: 'all', labelTe: 'అన్నీ', labelEn: 'All', count: metrics.counts.all },
           { id: 'pending', labelTe: 'బాకీ', labelEn: 'Pending', count: metrics.counts.pending },
@@ -361,7 +427,7 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
             <button
               key={tab.id}
               onClick={() => setStatusFilter(tab.id as typeof statusFilter)}
-              className={`min-h-[40px] px-3.5 rounded-xl whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              className={`min-h-[48px] px-4 rounded-xl whitespace-nowrap transition-all flex items-center gap-2 ${
                 isActive
                   ? 'bg-teal-800 text-white shadow-sm'
                   : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
@@ -369,7 +435,7 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
             >
               <span>{isTe ? tab.labelTe : tab.labelEn}</span>
               <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                className={`text-[11px] px-2 py-0.5 rounded-full font-black ${
                   isActive ? 'bg-teal-900 text-teal-200' : 'bg-slate-100 text-slate-600'
                 }`}
               >
@@ -452,15 +518,15 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
                     )}
                   </div>
 
-                  {/* 1-Click Call & WhatsApp Receipt Trigger Buttons */}
+                  {/* 1-Click Call & WhatsApp Receipt Trigger Buttons (48px Touch Targets) */}
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <a
                       href={`tel:${borrower.phone}`}
-                      className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 transition-colors"
+                      className="min-h-[48px] min-w-[48px] flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 transition-colors"
                       title={isTe ? 'ఫోన్ చేయండి' : 'Call Borrower'}
                       aria-label="Call Borrower"
                     >
-                      <Phone size={18} />
+                      <Phone size={20} />
                     </a>
                     <button
                       onClick={() =>
@@ -478,11 +544,11 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
                           isTe
                         )
                       }
-                      className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-colors"
+                      className="min-h-[48px] min-w-[48px] flex items-center justify-center rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-colors"
                       title={isTe ? 'రసీదు పంపండి (WhatsApp)' : 'Share WhatsApp Receipt'}
                       aria-label="Share WhatsApp Receipt"
                     >
-                      <MessageCircle size={18} />
+                      <MessageCircle size={20} />
                     </button>
                   </div>
                 </div>
@@ -545,36 +611,39 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
                   )}
                 </div>
 
-                {/* Action Buttons Row */}
+                {/* Action Buttons Row (56px Primary Touch Targets & Debounced) */}
                 {isPending && (
                   <div className="grid grid-cols-3 gap-2 pt-1">
                     {/* 1-Tap Full Paid Button (56px) */}
                     <button
                       type="button"
+                      disabled={Boolean(processingId)}
                       onClick={() => handleMarkFullPaid(item)}
-                      className="col-span-1 min-h-[52px] rounded-xl bg-teal-700 hover:bg-teal-800 active:scale-95 text-white font-extrabold text-xs shadow-md transition-all flex flex-col items-center justify-center p-1"
+                      className="col-span-1 min-h-[56px] rounded-2xl bg-teal-700 hover:bg-teal-800 disabled:opacity-50 active:scale-95 text-white font-extrabold text-xs shadow-md transition-all flex flex-col items-center justify-center p-1"
                     >
-                      <Check size={18} />
+                      <Check size={20} />
                       <span className="mt-0.5">{isTe ? 'పూర్తి వసూలు' : 'Full Paid'}</span>
                     </button>
 
                     {/* Partial Payment Button */}
                     <button
                       type="button"
+                      disabled={Boolean(processingId)}
                       onClick={() => setModalItem(item)}
-                      className="col-span-1 min-h-[52px] rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-extrabold text-xs shadow-md transition-all flex flex-col items-center justify-center p-1"
+                      className="col-span-1 min-h-[56px] rounded-2xl bg-amber-500 hover:bg-amber-600 disabled:opacity-50 active:scale-95 text-white font-extrabold text-xs shadow-md transition-all flex flex-col items-center justify-center p-1"
                     >
-                      <Clock size={18} />
+                      <Clock size={20} />
                       <span className="mt-0.5">{isTe ? 'కొంత భాగం' : 'Partial'}</span>
                     </button>
 
                     {/* Missed Button */}
                     <button
                       type="button"
+                      disabled={Boolean(processingId)}
                       onClick={() => handleMarkMissed(item)}
-                      className="col-span-1 min-h-[52px] rounded-xl bg-slate-100 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300 border border-slate-200 active:scale-95 text-slate-700 font-extrabold text-xs transition-all flex flex-col items-center justify-center p-1"
+                      className="col-span-1 min-h-[56px] rounded-2xl bg-slate-100 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300 border border-slate-200 disabled:opacity-50 active:scale-95 text-slate-700 font-extrabold text-xs transition-all flex flex-col items-center justify-center p-1"
                     >
-                      <AlertTriangle size={18} />
+                      <AlertTriangle size={20} />
                       <span className="mt-0.5">{isTe ? 'తప్పింది' : 'Missed'}</span>
                     </button>
                   </div>

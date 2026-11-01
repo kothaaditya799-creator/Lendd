@@ -6,13 +6,17 @@ export interface ToastProps {
   type?: 'success' | 'error' | 'info';
   onClose: () => void;
   duration?: number; // milliseconds, default 4000
+  onUndo?: () => void;
+  undoLabel?: string;
 }
 
 export const Toast: React.FC<ToastProps> = ({
   message,
   type = 'success',
   onClose,
-  duration = 4000,
+  duration = 5000,
+  onUndo,
+  undoLabel = 'Undo',
 }) => {
   useEffect(() => {
     if (!message) return;
@@ -38,20 +42,34 @@ export const Toast: React.FC<ToastProps> = ({
             : 'bg-teal-900/95 text-white border-teal-500 shadow-teal-950/40'
         }`}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-1 mr-2">
           {isSuccess && <CheckCircle2 className="h-6 w-6 text-emerald-400 shrink-0" />}
           {isError && <AlertCircle className="h-6 w-6 text-rose-400 shrink-0" />}
           {!isSuccess && !isError && <CheckCircle2 className="h-6 w-6 text-teal-400 shrink-0" />}
           <p className="text-sm sm:text-base font-bold leading-snug">{message}</p>
         </div>
-        <button
-          onClick={onClose}
-          type="button"
-          className="p-1.5 rounded-full hover:bg-white/20 active:bg-white/30 text-white/80 hover:text-white transition-colors shrink-0 ml-2"
-          aria-label="Dismiss notification"
-        >
-          <X size={18} />
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {onUndo && (
+            <button
+              onClick={() => {
+                onUndo();
+                onClose();
+              }}
+              type="button"
+              className="px-3 py-1 bg-white/20 hover:bg-white/30 text-white font-black text-xs rounded-xl transition-all uppercase tracking-wider"
+            >
+              {undoLabel}
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            type="button"
+            className="p-1.5 rounded-full hover:bg-white/20 active:bg-white/30 text-white/80 hover:text-white transition-colors"
+            aria-label="Dismiss notification"
+          >
+            <X size={18} />
+          </button>
+        </div>
       </div>
     </div>
   );

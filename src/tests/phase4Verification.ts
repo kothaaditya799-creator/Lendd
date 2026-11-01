@@ -100,6 +100,19 @@ export function runPhase4Verification(): {
   assert('Completion Logic: ₹500 payment clears ₹500 outstanding to ₹0', step3.newOutstanding === 0);
   assert('Completion Logic: Marks loan as completed', step3.isCompleted);
 
+  // Downward adjustment on a completed loan restores active status
+  const step3Revert = calculatePaymentDelta(step3.newOutstanding, step3.newTotalCollected, 500, 300);
+  assert('Status Inversion: Downward adjustment restores outstanding balance to ₹200', step3Revert.newOutstanding === 200);
+  assert('Status Inversion: Loan is no longer completed', !step3Revert.isCompleted);
+
+  // Edit ceiling check in modal (maxAllowedAmount = loanOutstanding + initialAmount)
+  const modalCeiling = (loanOutstanding: number, initialAmount: number, newAmount: number) => {
+    const max = loanOutstanding + initialAmount;
+    return newAmount <= max;
+  };
+  assert('Modal Edit Ceiling: Allows correcting payment when loan balance is ₹0 but initialAmount is ₹500', modalCeiling(0, 500, 400));
+  assert('Modal Edit Ceiling: Blocks payment higher than initialAmount when loan balance is ₹0', !modalCeiling(0, 500, 600));
+
   // Swiss Cheese Layer 3: Hard Ceiling Block
   let ceilingCaught = false;
   try {

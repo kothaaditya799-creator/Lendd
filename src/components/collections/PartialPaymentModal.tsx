@@ -55,11 +55,12 @@ export const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
       return;
     }
 
-    if (collectedAmount > loanOutstanding) {
+    const maxAllowedAmount = loanOutstanding + initialAmount;
+    if (collectedAmount > maxAllowedAmount) {
       setError(
         isTe
-          ? `మొత్తం మిగిలిన అప్పు (${formatINR(loanOutstanding)}) కంటే ఎక్కువ ఉండకూడదు`
-          : `Amount cannot exceed total loan outstanding balance (${formatINR(loanOutstanding)})`
+          ? `మొత్తం మిగిలిన అప్పు (${formatINR(maxAllowedAmount)}) కంటే ఎక్కువ ఉండకూడదు`
+          : `Amount cannot exceed total loan outstanding balance (${formatINR(maxAllowedAmount)})`
       );
       return;
     }
@@ -122,7 +123,7 @@ export const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                 {isTe ? 'మొత్తం లోన్ బాకీ' : 'Loan Outstanding'}
               </span>
               <span className="text-base font-extrabold text-teal-900 mt-0.5 block">
-                {formatINR(loanOutstanding)}
+                {formatINR(loanOutstanding + initialAmount)}
               </span>
             </div>
           </div>
@@ -219,3 +220,4 @@ export const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
     </div>
   );
 };
+
