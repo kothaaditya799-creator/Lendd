@@ -95,7 +95,7 @@ export const LoanSchema = z.object({
   totalRepaymentAmount: CurrencyAmountSchema.optional(),
   collectionFrequency: CollectionFrequencyEnum.optional(),
   installmentAmount: z.number().int().positive().optional(),
-  totalInstallments: z.number().int().positive().max(365).optional(),
+  totalInstallments: z.number().int().positive().max(999).optional(),
 
   // SP (Special Interest) Specifics (Simple / Flat interest only)
   interestRateMonthly: z.number().min(0.1).max(100).optional(), // e.g. 2.0 = 2% per month

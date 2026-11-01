@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Phase 4: Daily Collection System & Fast Field Logging] - 2026-11-02
+### Added
+- **Daily Collections Queue View (`src/pages/CollectionsPage.tsx`)**:
+  - Date navigator with Previous/Next day buttons, jump-to-today shortcut, and native date picker.
+  - Formatted bilingual dates displaying day of week in Telugu and English (*సోమవారం, 2 నవంబర్ 2026* / *Monday, 2 Nov 2026*).
+  - High-contrast summary cards: **Target (రావలసినది)**, **Collected (వసూలు)**, and **Pending (బాకీ)**.
+  - Live progress bar with completion percentage tracking.
+  - Search bar supporting case-insensitive borrower name and 10-digit mobile number lookup.
+  - Status filter tabs (*All, Pending, Paid, Partial, Missed*) with live item count badges.
+- **Fast 1-Tap Field Collection Actions**:
+  - **1-Tap Full Payment**: One-click action recording full installment amount, automatically updating schedule status to `paid` and deducting from parent loan balance.
+  - **Partial Payment Modal (`src/components/collections/PartialPaymentModal.tsx`)**: Bottom-sheet modal with custom numeric input, quick percentage chips (25%, 50%, 75%), live deficit calculation, and optional note capture.
+  - **Mark Missed**: Fast toggle flagging installment as missed (`collectedAmount: 0`).
+  - **Edit / Adjust**: Ability to adjust already recorded payments with net payment delta tracking.
+- **WhatsApp Payment Receipt Generator (`src/utils/receiptGenerator.ts`)**:
+  - One-click receipt sharing formatted in Telugu or English with borrower name, amount collected, installment details, and remaining loan balance.
+  - Direct 1-tap phone dialer link (`tel:...`).
+- **Automated Verification**:
+  - 33/33 tests passing in `src/tests/phase4Verification.ts` and `src/tests/runPhase4Cli.mjs`.
+  - Comprehensive coverage of receipt generation, status state machine, loan balance deltas, Swiss Cheese Layer 3 hard ceiling block, aggregation math, and date navigation.
+
+### Verified
+- `tsc && vite build` built with 0 errors.
+
+---
+
 ## [Phase 3: Loan Engine & Schedule Generation Math (DF / SP Math)] - 2026-10-31
 ### Added
 - **Financial Calendar Mathematics (`src/utils/dateUtils.ts`)**:

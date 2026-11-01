@@ -1,5 +1,6 @@
 import { runPhase2GuardRailTests } from './phase2Verification';
 import { runPhase3Verification } from './phase3Verification';
+import { runPhase4Verification } from './phase4Verification';
 
 export async function executeAllTestSuites() {
   console.log('====================================================');
@@ -29,12 +30,27 @@ export async function executeAllTestSuites() {
     }
   }
   console.log(`Phase 3: ${p3.passed}/${p3.total} passed`);
+
+  console.log('====================================================');
+  console.log('📋  PHASE 4 DAILY COLLECTION SYSTEM SUITE');
+  console.log('====================================================');
+
+  const p4 = runPhase4Verification();
+  for (const test of p4.results) {
+    const icon = test.passed ? '✅' : '❌';
+    console.log(`${icon} ${test.name}`);
+    if (test.details && !test.passed) {
+      console.error(`   Error: ${test.details}`);
+    }
+  }
+  console.log(`Phase 4: ${p4.passed}/${p4.total} passed`);
   console.log('====================================================');
 
   return {
     phase2: p2,
     phase3: p3,
-    allPassed: p2.failed === 0 && p3.failed === 0,
+    phase4: p4,
+    allPassed: p2.failed === 0 && p3.failed === 0 && p4.failed === 0,
   };
 }
 
