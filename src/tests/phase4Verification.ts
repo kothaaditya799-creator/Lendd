@@ -238,6 +238,50 @@ export function runPhase4Verification(): {
   assert('Date Navigation: Month boundary crosses 2026-10-31 to 2026-11-01', addDays('2026-10-31', 1) === '2026-11-01');
   assert('Date Navigation: Year boundary crosses 2026-12-31 to 2027-01-01', addDays('2026-12-31', 1) === '2027-01-01');
 
+  // 8. Dynamic Stacking: Pending Float to Top, Processed Stack to Bottom
+  interface TestQueueItem {
+    borrowerName: string;
+    status: 'pending' | 'paid' | 'partial' | 'missed';
+  }
+
+  function sortQueue(queue: TestQueueItem[]): string[] {
+    return [...queue]
+      .sort((x, y) => {
+        const xPending = x.status === 'pending';
+        const yPending = y.status === 'pending';
+        if (xPending && !yPending) return -1;
+        if (!xPending && yPending) return 1;
+        return x.borrowerName.localeCompare(y.borrowerName, undefined, { sensitivity: 'base' });
+      })
+      .map((item) => item.borrowerName);
+  }
+
+  // Initial: a, b, c, d all pending
+  const q: TestQueueItem[] = [
+    { borrowerName: 'a', status: 'pending' },
+    { borrowerName: 'b', status: 'pending' },
+    { borrowerName: 'c', status: 'pending' },
+    { borrowerName: 'd', status: 'pending' },
+  ];
+  assert('Dynamic Stacking: Initial queue is [a, b, c, d]', sortQueue(q).join(',') === 'a,b,c,d');
+
+  // Step 1: d is paid -> [a, b, c, d]
+  q.find((it) => it.borrowerName === 'd')!.status = 'paid';
+  assert('Dynamic Stacking: When d is paid, list is [a, b, c, d] (d is bottom)', sortQueue(q).join(',') === 'a,b,c,d');
+
+  // Step 2: b is paid -> pending are [a, c], processed are [b, d] -> [a, c, b, d]
+  q.find((it) => it.borrowerName === 'b')!.status = 'paid';
+  const afterB = sortQueue(q);
+  assert('Dynamic Stacking: When b is also paid, list is strictly [a, c, b, d]', afterB.join(',') === 'a,c,b,d');
+
+  // Step 3: a is missed -> pending is [c], processed are [a, b, d] -> [c, a, b, d]
+  q.find((it) => it.borrowerName === 'a')!.status = 'missed';
+  assert('Dynamic Stacking: When a is missed, pending c floats to top [c, a, b, d]', sortQueue(q).join(',') === 'c,a,b,d');
+
+  // Step 4: Undo b back to pending -> pending are [b, c], processed are [a, d] -> [b, c, a, d]
+  q.find((it) => it.borrowerName === 'b')!.status = 'pending';
+  assert('Dynamic Stacking: Undoing b to pending floats b back to top [b, c, a, d]', sortQueue(q).join(',') === 'b,c,a,d');
+
   const passed = results.filter((r) => r.passed).length;
   const failed = results.filter((r) => !r.passed).length;
 
