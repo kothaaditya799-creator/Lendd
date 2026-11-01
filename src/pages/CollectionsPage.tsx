@@ -553,9 +553,9 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
                     isPaid
                       ? 'border-emerald-200 bg-emerald-50/20'
                       : isPartial
-                      ? 'border-amber-300 bg-amber-50/20'
+                      ? 'border-amber-200 bg-amber-50/20'
                       : isMissed
-                      ? 'border-rose-300 bg-rose-50/20'
+                      ? 'border-rose-200 bg-rose-50/20'
                       : 'border-slate-200 hover:border-teal-300'
                   }`}
                 >
@@ -632,59 +632,76 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
                     </div>
                   </div>
 
-                  {/* Current Status Display */}
-                  <div className="flex items-center justify-between text-xs">
-                    {isPaid ? (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
-                        <CheckCircle2 size={14} className="text-emerald-700" />
-                        {isTe ? 'పూర్తిగా చెల్లించారు' : 'Fully Paid'} ({formatINR(schedule.amountPaid || schedule.amountDue)})
-                      </span>
-                    ) : isPartial ? (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                        <Clock size={14} className="text-amber-700" />
-                        {isTe ? 'కొంత భాగం చెల్లించారు' : 'Partially Paid'} ({formatINR(schedule.amountPaid || 0)} / {formatINR(schedule.amountDue)})
-                      </span>
-                    ) : isMissed ? (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-bold bg-rose-100 text-rose-900 border border-rose-300">
-                        <AlertTriangle size={14} className="text-rose-700" />
-                        {isTe ? 'వాయిదా తప్పింది' : 'Installment Missed'}
-                      </span>
-                    ) : (
+                  {/* Status Banner - Displayed Uniformly across Pending, Paid, Partial, and Missed */}
+                  {isPending ? (
+                    <div className="flex items-center justify-between text-xs px-1">
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-bold bg-slate-100 text-slate-700 border border-slate-300">
                         <Clock size={14} className="text-slate-500" />
                         {isTe ? 'ఇంకా వసూలు కాలేదు' : 'Pending Collection'}
                       </span>
-                    )}
-
-                    {/* Reset / Undo Option & Edit Option for processed payments */}
-                    {!isPending && (
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <button
-                          type="button"
-                          disabled={Boolean(processingId)}
-                          onClick={() => handleResetToPending(item)}
-                          className="text-xs font-bold text-rose-700 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
-                          title={isTe ? 'బాకీగా మార్చు (రీసెట్)' : 'Reset to Pending'}
-                        >
-                          <RotateCcw size={13} />
-                          <span>{isTe ? 'బాకీగా మార్చు' : 'Reset to Pending'}</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          disabled={Boolean(processingId)}
-                          onClick={() => setModalItem(item)}
-                          className="text-xs font-bold text-slate-700 hover:text-teal-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
-                        >
-                          <Pencil size={13} />
-                          <span>{isTe ? 'సవరించు' : 'Edit'}</span>
-                        </button>
+                      <span className="text-[11px] font-semibold text-slate-400">
+                        {isTe ? 'చర్యను ఎంచుకోండి ↓' : 'Select action ↓'}
+                      </span>
+                    </div>
+                  ) : (
+                    /* Processed Status Banner (Completely Uniform across Paid, Partial, and Missed) */
+                    <div
+                      className={`p-3 rounded-xl border flex items-center justify-between text-xs font-semibold ${
+                        isPaid
+                          ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
+                          : isPartial
+                          ? 'bg-amber-50/80 border-amber-200 text-amber-950'
+                          : 'bg-rose-50/80 border-rose-200 text-rose-950'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        {isPaid ? (
+                          <CheckCircle2 size={18} className="text-emerald-700 flex-shrink-0" />
+                        ) : isPartial ? (
+                          <Clock size={18} className="text-amber-700 flex-shrink-0" />
+                        ) : (
+                          <AlertTriangle size={18} className="text-rose-700 flex-shrink-0" />
+                        )}
+                        <div>
+                          <div className="font-extrabold text-xs">
+                            {isPaid
+                              ? isTe ? 'పూర్తిగా చెల్లించారు' : 'Fully Paid'
+                              : isPartial
+                              ? isTe ? 'కొంత భాగం చెల్లించారు' : 'Partially Paid'
+                              : isTe ? 'వాయిదా తప్పింది' : 'Installment Missed'}
+                          </div>
+                          <div className="text-[11px] opacity-80 font-medium mt-0.5">
+                            {isPaid
+                              ? `${isTe ? 'వసూలైనది' : 'Collected'}: ${formatINR(schedule.amountPaid || schedule.amountDue)}`
+                              : isPartial
+                              ? `${isTe ? 'వసూలైనది' : 'Collected'}: ${formatINR(schedule.amountPaid || 0)} (${isTe ? 'మిగిలినది' : 'Deficit'}: ${formatINR(Math.max(0, schedule.amountDue - (schedule.amountPaid || 0)))})`
+                              : `${isTe ? 'వసూలైనది' : 'Collected'}: ₹0 (${isTe ? 'బాకీ' : 'Deficit'}: ${formatINR(schedule.amountDue)})`}
+                          </div>
+                        </div>
                       </div>
-                    )}
-                  </div>
 
-                  {/* Action Buttons Row (56px Primary Touch Targets & Debounced) */}
-                  {isPending && (
+                      {/* Right Badge / Status Pill */}
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border flex-shrink-0 ${
+                          isPaid
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                            : isPartial
+                            ? 'bg-amber-100 text-amber-800 border-amber-300'
+                            : 'bg-rose-100 text-rose-800 border-rose-300'
+                        }`}
+                      >
+                        {isPaid
+                          ? isTe ? 'పూర్తయింది' : 'Paid'
+                          : isPartial
+                          ? `${Math.round(((schedule.amountPaid || 0) / schedule.amountDue) * 100)}%`
+                          : isTe ? 'తప్పింది' : 'Missed'}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Action Buttons Row */}
+                  {isPending ? (
+                    /* Pending State: 3-Button Action Grid (56px Primary Touch Targets) */
                     <div className="grid grid-cols-3 gap-2 pt-1">
                       {/* 1-Tap Full Paid Button (56px) */}
                       <button
@@ -717,6 +734,33 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
                       >
                         <AlertTriangle size={20} />
                         <span className="mt-0.5">{isTe ? 'తప్పింది' : 'Missed'}</span>
+                      </button>
+                    </div>
+                  ) : (
+                    /* Processed State: 2-Button Action Grid (Completely Uniform for Paid, Partial, and Missed) */
+                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
+                      {/* Reset to Pending (Undo) Button */}
+                      <button
+                        type="button"
+                        disabled={Boolean(processingId)}
+                        onClick={() => handleResetToPending(item)}
+                        className="min-h-[48px] rounded-xl border-2 border-rose-200 bg-rose-50 hover:bg-rose-100 active:scale-95 text-rose-800 font-bold text-xs flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                        title={isTe ? 'బాకీగా మార్చు (రీసెట్)' : 'Reset to Pending Queue'}
+                      >
+                        <RotateCcw size={15} />
+                        <span>{isTe ? 'బాకీగా మార్చు' : 'Reset to Pending'}</span>
+                      </button>
+
+                      {/* Edit / Adjust Button */}
+                      <button
+                        type="button"
+                        disabled={Boolean(processingId)}
+                        onClick={() => setModalItem(item)}
+                        className="min-h-[48px] rounded-xl border-2 border-slate-200 bg-slate-50 hover:bg-slate-100 active:scale-95 text-slate-800 font-bold text-xs flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                        title={isTe ? 'సవరించు' : 'Edit / Adjust'}
+                      >
+                        <Pencil size={15} />
+                        <span>{isTe ? 'సవరించు' : 'Edit / Adjust'}</span>
                       </button>
                     </div>
                   )}

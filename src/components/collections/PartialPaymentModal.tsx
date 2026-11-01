@@ -39,12 +39,26 @@ export const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
   const collectedAmount = parseInt(amountStr.replace(/\D/g, ''), 10) || 0;
   const remainingDueOnSchedule = Math.max(0, amountDue - collectedAmount);
 
-  // Quick chips: 25%, 50%, 75% of amountDue
+  // Quick chips: 25%, 50%, 75%, 100% of amountDue
   const quickChips = [
     { label: '25%', value: Math.round(amountDue * 0.25) },
     { label: '50%', value: Math.round(amountDue * 0.5) },
     { label: '75%', value: Math.round(amountDue * 0.75) },
-  ].filter((c) => c.value > 0 && c.value < amountDue);
+    { label: '100%', value: amountDue },
+  ].filter((c) => c.value > 0);
+
+  const getModalTitle = () => {
+    if (currentStatus === 'paid') {
+      return isTe ? 'వసూలు మొత్తం సవరణ' : 'Edit Collected Payment';
+    }
+    if (currentStatus === 'partial') {
+      return isTe ? 'పాక్షిక వసూలు సవరణ' : 'Edit Partial Payment';
+    }
+    if (currentStatus === 'missed') {
+      return isTe ? 'వసూలు నమోదు (వాయిదా తప్పినది)' : 'Record Collection (Was Missed)';
+    }
+    return isTe ? 'కొంత భాగం వసూలు నమోదు' : 'Record Partial Payment';
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,7 +102,7 @@ export const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
         <div className="bg-teal-900 text-white p-4 px-5 flex items-center justify-between">
           <div>
             <h3 className="font-bold text-lg leading-snug">
-              {isTe ? 'కొంత భాగం వసూలు నమోదు' : 'Record Partial Payment'}
+              {getModalTitle()}
             </h3>
             <p className="text-xs text-teal-200 mt-0.5">
               👤 {borrowerName}
@@ -159,7 +173,7 @@ export const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
               <span className="block text-[11px] font-semibold text-slate-500 mb-1.5">
                 {isTe ? 'శీఘ్ర ఎంపికలు:' : 'Quick Select:'}
               </span>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-4 gap-1.5">
                 {quickChips.map((chip) => (
                   <button
                     key={chip.label}
@@ -212,9 +226,13 @@ export const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
               <>
                 <Check size={20} />
                 <span>
-                  {isTe
-                    ? `✓ ₹${collectedAmount.toLocaleString('en-IN')} వసూలు నిర్ధారించండి`
-                    : `✓ Confirm ₹${collectedAmount.toLocaleString('en-IN')} Collection`}
+                  {currentStatus && currentStatus !== 'pending'
+                    ? (isTe
+                        ? `✓ ₹${collectedAmount.toLocaleString('en-IN')} మార్పులను భద్రపరచండి`
+                        : `✓ Update ₹${collectedAmount.toLocaleString('en-IN')} Collection`)
+                    : (isTe
+                        ? `✓ ₹${collectedAmount.toLocaleString('en-IN')} వసూలు నిర్ధారించండి`
+                        : `✓ Confirm ₹${collectedAmount.toLocaleString('en-IN')} Collection`)}
                 </span>
               </>
             )}
