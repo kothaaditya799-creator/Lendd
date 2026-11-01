@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Check, AlertCircle } from 'lucide-react';
+import { X, Check, AlertCircle, RotateCcw } from 'lucide-react';
 import { formatINR } from '../../utils/currency';
 
 interface PartialPaymentModalProps {
@@ -10,7 +10,9 @@ interface PartialPaymentModalProps {
   amountDue: number;
   loanOutstanding: number;
   initialAmount?: number;
+  currentStatus?: 'pending' | 'paid' | 'partial' | 'missed';
   onConfirm: (amount: number, notes?: string) => Promise<void>;
+  onResetToPending?: () => Promise<void>;
 }
 
 export const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
@@ -21,7 +23,9 @@ export const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
   amountDue,
   loanOutstanding,
   initialAmount = 0,
+  currentStatus,
   onConfirm,
+  onResetToPending,
 }) => {
   const [amountStr, setAmountStr] = useState<string>(
     initialAmount > 0 ? initialAmount.toString() : ''
@@ -215,6 +219,33 @@ export const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
               </>
             )}
           </button>
+
+          {/* Reset to Pending / Mistake Correction Button */}
+          {onResetToPending && currentStatus && currentStatus !== 'pending' && (
+            <button
+              type="button"
+              disabled={isSubmitting}
+              onClick={async () => {
+                setIsSubmitting(true);
+                try {
+                  await onResetToPending();
+                  onClose();
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : 'Failed to reset milestone');
+                } finally {
+                  setIsSubmitting(false);
+                }
+              }}
+              className="w-full min-h-[52px] rounded-2xl border-2 border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-800 font-bold text-sm transition-all flex items-center justify-center space-x-2 active:scale-95"
+            >
+              <RotateCcw size={16} />
+              <span>
+                {isTe
+                  ? 'బాకీగా రీసెట్ చేయి (Reset to Pending Queue)'
+                  : 'Undo & Reset to Pending Queue'}
+              </span>
+            </button>
+          )}
         </form>
       </div>
     </div>

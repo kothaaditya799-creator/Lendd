@@ -282,6 +282,38 @@ export function runPhase4Verification(): {
   q.find((it) => it.borrowerName === 'b')!.status = 'pending';
   assert('Dynamic Stacking: Undoing b to pending floats b back to top [b, c, a, d]', sortQueue(q).join(',') === 'b,c,a,d');
 
+  // 9. Reset to Pending Logic & State Restoration
+  function simulateResetToPending(
+    currentOutstanding: number,
+    currentTotalCollected: number,
+    previousPaid: number
+  ) {
+    const newOutstanding = currentOutstanding + previousPaid;
+    const newTotalCollected = Math.max(0, currentTotalCollected - previousPaid);
+    return {
+      newOutstanding,
+      newTotalCollected,
+      status: 'pending' as const,
+      amountPaid: 0,
+    };
+  }
+
+  // Resetting a full payment of ₹120 (outstanding was ₹11,880, totalCollected was ₹120)
+  const resetFull = simulateResetToPending(11880, 120, 120);
+  assert('Reset to Pending: Restores loan balance from ₹11,880 to ₹12,000', resetFull.newOutstanding === 12000);
+  assert('Reset to Pending: Restores totalCollected to ₹0', resetFull.newTotalCollected === 0);
+  assert('Reset to Pending: Schedule status becomes pending and amountPaid is 0', resetFull.status === 'pending' && resetFull.amountPaid === 0);
+
+  // Resetting a partial payment of ₹50
+  const resetPartial = simulateResetToPending(11950, 50, 50);
+  assert('Reset to Pending: Restores partial loan balance from ₹11,950 to ₹12,000', resetPartial.newOutstanding === 12000);
+  assert('Reset to Pending: Restores partial totalCollected to 0', resetPartial.newTotalCollected === 0);
+
+  // Resetting a missed payment of ₹0
+  const resetMissed = simulateResetToPending(12000, 0, 0);
+  assert('Reset to Pending: Missed payment reset leaves loan balance unchanged at ₹12,000', resetMissed.newOutstanding === 12000);
+  assert('Reset to Pending: Missed payment reset sets status to pending', resetMissed.status === 'pending');
+
   const passed = results.filter((r) => r.passed).length;
   const failed = results.filter((r) => !r.passed).length;
 

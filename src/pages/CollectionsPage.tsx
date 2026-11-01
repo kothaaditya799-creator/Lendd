@@ -12,6 +12,7 @@ import {
   Search,
   Check,
   TrendingUp,
+  Pencil,
 } from 'lucide-react';
 import { paymentRepo } from '../db/repositories/paymentRepo';
 import { loanRepo } from '../db/repositories/loanRepo';
@@ -225,6 +226,28 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
       );
 
       await loadCollections();
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  // Reset Milestone to Pending (Mistake Correction / Complete Undo)
+  const handleResetToPending = async (item: CollectionItem) => {
+    if (processingId) return;
+    setProcessingId(item.schedule.id);
+
+    try {
+      await paymentRepo.resetToPending(item.schedule.id);
+
+      setToastMessage(
+        isTe
+          ? `✓ ${item.borrower.name}: రికార్డు రద్దు చేయబడింది, మళ్లీ బాకీ జాబితాలోకి చేర్చబడింది!`
+          : `✓ ${item.borrower.name}: Payment reset to pending queue!`
+      );
+
+      await loadCollections();
+    } catch (err) {
+      setToastMessage(err instanceof Error ? `⚠️ ${err.message}` : 'Failed to reset milestone');
     } finally {
       setProcessingId(null);
     }
@@ -633,15 +656,30 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
                       </span>
                     )}
 
-                    {/* Reset / Undo Option for already processed payments */}
+                    {/* Reset / Undo Option & Edit Option for processed payments */}
                     {!isPending && (
-                      <button
-                        onClick={() => setModalItem(item)}
-                        className="text-xs font-bold text-slate-500 hover:text-teal-800 flex items-center gap-1 transition-colors"
-                      >
-                        <RotateCcw size={12} />
-                        <span>{isTe ? 'సవరించు' : 'Edit / Adjust'}</span>
-                      </button>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          disabled={Boolean(processingId)}
+                          onClick={() => handleResetToPending(item)}
+                          className="text-xs font-bold text-rose-700 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
+                          title={isTe ? 'బాకీగా మార్చు (రీసెట్)' : 'Reset to Pending'}
+                        >
+                          <RotateCcw size={13} />
+                          <span>{isTe ? 'బాకీగా మార్చు' : 'Reset to Pending'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={Boolean(processingId)}
+                          onClick={() => setModalItem(item)}
+                          className="text-xs font-bold text-slate-700 hover:text-teal-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
+                        >
+                          <Pencil size={13} />
+                          <span>{isTe ? 'సవరించు' : 'Edit'}</span>
+                        </button>
+                      </div>
                     )}
                   </div>
 
@@ -699,7 +737,9 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
           amountDue={modalItem.schedule.amountDue}
           loanOutstanding={modalItem.loan.outstandingBalance}
           initialAmount={modalItem.schedule.amountPaid || 0}
+          currentStatus={modalItem.schedule.status}
           onConfirm={handleConfirmPartialPayment}
+          onResetToPending={() => handleResetToPending(modalItem)}
         />
       )}
     </div>
