@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Phase 5: Decision Intelligence & Portfolio Insights Dashboard] - 2026-11-02
+### Added
+- **Analytics & Intelligence Engine (`src/utils/portfolioAnalytics.ts`)**:
+  - `calculatePortfolioMetrics`: Aggregates active capital deployed, outstanding balance, total collections across loans, and projected interest/yield.
+  - `calculateAgingBuckets`: Categorizes overdue schedules into custom aging buckets:
+    - 🟢 Healthy / Current (0–5 days)
+    - 🟡 Minor Delay (6–12 days)
+    - 🟠 Warning (13–30 days)
+    - 🔴 Critical / Hard Default (>30 days)
+    - Calculates amount at risk, item count, and full borrower-level detail.
+  - `detectLeakingBorrowers`: Early warning system flagging borrowers with $\ge 3$ partial payments or $\ge 2$ missed installments on active loans, sorting by total deficit.
+  - `calculateConcentrationRisk`: Computes top 1, top 3, and top 5 borrower exposure against total active debt with risk level classification (`healthy`, `moderate`, `high`).
+  - `calculateEodSummary`: Daily reconciliation computing expected target, actual collected, shortfall, efficiency %, headcount audit (paid, partial, missed, pending), new loans disbursed today, and net cash in hand flow (`Collections - Disbursements`).
+  - `generateWhatsAppEodText` & `openWhatsAppEodSummary`: 1-click WhatsApp evening audit sharing in formatted Telugu and English.
+- **Decision Intelligence Dashboard UI (`src/pages/InsightsPage.tsx`)**:
+  - **Portfolio Capital Hero Card**: Deep Teal card with capital deployed, active outstanding, total collected, projected yield, and visual recovery progress bar.
+  - **End-of-Day (EOD) Cash Tally Card**: Live date switcher (Previous/Next/Today/Native Picker), net cash in hand (+/-) banner with directional arrow icons, collections in vs disbursements out, performance gap, headcount grid, and 1-tap WhatsApp share button.
+  - **Overdue Aging Analysis Section**: 4 interactive bucket cards with expandable drawers displaying affected borrowers, days overdue, overdue amounts, and 1-tap phone dialer buttons.
+  - **Leaking Buckets Detector Section**: Warning cards highlighting chronic under-payers with accumulated deficit tags and call shortcuts, or an all-clear green reassurance card when healthy.
+  - **Capital Concentration Radar Section**: Visual concentration progress bar, risk badge, and ranked list of top exposure borrowers.
+- **Calendar Math Expansion (`src/utils/dateUtils.ts`)**:
+  - `getDaysDifference`: Timezone-safe calendar day difference calculator.
+- **Automated Verification**:
+  - 56/56 unit tests passing in `src/tests/phase5Verification.ts` and `src/tests/runPhase5Cli.mjs`.
+  - Comprehensive coverage of days difference, aging buckets, leaking borrower flags, concentration ratios, EOD cash reconciliation, and WhatsApp text formatting.
+
+### Verified
+- `tsc && vite build` built with 0 errors.
+
+---
+
 ## [Phase 4: Daily Collection System & Fast Field Logging] - 2026-11-02
 ### Added
 - **Daily Collections Queue View (`src/pages/CollectionsPage.tsx`)**:

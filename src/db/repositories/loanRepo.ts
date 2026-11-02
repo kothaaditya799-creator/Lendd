@@ -56,6 +56,13 @@ export class LoanRepository {
   }
 
   /**
+   * Get all loans in the database.
+   */
+  async getAllLoans(): Promise<Loan[]> {
+    return await db.loans.toArray();
+  }
+
+  /**
    * Get loan by primary key ID.
    */
   async getLoanById(id: string): Promise<Loan | undefined> {

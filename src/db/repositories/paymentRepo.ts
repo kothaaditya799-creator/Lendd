@@ -54,6 +54,13 @@ export class PaymentRepository {
   }
 
   /**
+   * Get all schedule milestones in the database.
+   */
+  async getAllSchedules(): Promise<PaymentSchedule[]> {
+    return await db.schedules.toArray();
+  }
+
+  /**
    * ATOMIC PAYMENT COLLECTION (Swiss Cheese Layer 3 & Hard Ceiling Block)
    * Records payment on a schedule milestone and adjusts the parent loan balance atomically.
    */

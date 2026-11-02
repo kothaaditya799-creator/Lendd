@@ -57,6 +57,17 @@ export function addDays(isoStr: string, days: number): string {
 }
 
 /**
+ * Calculates whole calendar days between two ISO date strings (toIso - fromIso).
+ * Positive if toIso > fromIso (e.g. today - dueDate = days overdue).
+ */
+export function getDaysDifference(fromIso: string, toIso: string): number {
+  const fromDate = parseISODate(fromIso);
+  const toDate = parseISODate(toIso);
+  const msDiff = toDate.getTime() - fromDate.getTime();
+  return Math.round(msDiff / (1000 * 60 * 60 * 24));
+}
+
+/**
  * Robust month addition that preserves original target day where possible,
  * clamping safely to the last day of the month without rollover bugs.
  * (e.g. Jan 31 + 1 month in 2024 leap year -> Feb 29, in 2025 -> Feb 28, in 2 months -> Mar 31)
