@@ -271,11 +271,11 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
           </div>
 
           {/* Date Picker Controls */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={handlePrevDay}
-              className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 flex items-center justify-center text-slate-700"
+              className="min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 flex items-center justify-center text-slate-700"
               title="Previous Day"
             >
               <ChevronLeft size={18} />
@@ -283,7 +283,7 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
             <button
               type="button"
               onClick={() => datePickerRef.current?.showPicker()}
-              className="px-2.5 h-9 rounded-xl bg-teal-50 text-teal-800 border border-teal-200 text-xs font-bold flex items-center gap-1.5 hover:bg-teal-100 active:scale-95"
+              className="px-3 min-h-[44px] rounded-xl bg-teal-50 text-teal-800 border border-teal-200 text-xs font-bold flex items-center gap-1.5 hover:bg-teal-100 active:scale-95"
             >
               <Calendar size={14} />
               <span>{isTe ? 'తేదీ' : 'Date'}</span>
@@ -291,7 +291,7 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
             <button
               type="button"
               onClick={handleNextDay}
-              className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 flex items-center justify-center text-slate-700"
+              className="min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 flex items-center justify-center text-slate-700"
               title="Next Day"
             >
               <ChevronRight size={18} />
@@ -558,10 +558,10 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
                     {item.borrowerPhone && (
                       <a
                         href={`tel:${item.borrowerPhone}`}
-                        className="w-8 h-8 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 flex items-center justify-center flex-shrink-0"
+                        className="min-w-[44px] min-h-[44px] rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 flex items-center justify-center flex-shrink-0"
                         title={isTe ? 'ఫోన్ చేయండి' : 'Call'}
                       >
-                        <Phone size={14} />
+                        <Phone size={16} />
                       </a>
                     )}
                   </div>
