@@ -308,11 +308,10 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
 
         {/* Big Net Cash in Hand Hero Banner */}
         <div
-          className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all ${
-            eodSummary.netCashFlow >= 0
+          className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all ${eodSummary.netCashFlow >= 0
               ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
               : 'bg-rose-50 border-rose-300 text-rose-950'
-          }`}
+            }`}
         >
           <div>
             <span className="text-[11px] font-extrabold uppercase tracking-wider opacity-80 block">
@@ -334,9 +333,8 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
           </div>
 
           <div
-            className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm ${
-              eodSummary.netCashFlow >= 0 ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
-            }`}
+            className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm ${eodSummary.netCashFlow >= 0 ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
+              }`}
           >
             {eodSummary.netCashFlow >= 0 ? <ArrowUpRight size={28} /> : <ArrowDownRight size={28} />}
           </div>
@@ -452,11 +450,10 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
           <button
             type="button"
             onClick={() => toggleBucket('healthy')}
-            className={`p-3 rounded-2xl border-2 text-left transition-all active:scale-95 ${
-              expandedBucket === 'healthy'
+            className={`p-3 rounded-2xl border-2 text-left transition-all active:scale-95 ${expandedBucket === 'healthy'
                 ? 'bg-emerald-100/70 border-emerald-500 shadow-sm'
                 : 'bg-emerald-50/50 border-emerald-200 hover:bg-emerald-100/40'
-            }`}
+              }`}
           >
             <div className="flex items-center justify-between text-xs font-bold text-emerald-900 mb-1">
               <span>{isTe ? 'సాధారణం' : 'Healthy'}</span>
@@ -473,11 +470,10 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
           <button
             type="button"
             onClick={() => toggleBucket('minorDelay')}
-            className={`p-3 rounded-2xl border-2 text-left transition-all active:scale-95 ${
-              expandedBucket === 'minorDelay'
+            className={`p-3 rounded-2xl border-2 text-left transition-all active:scale-95 ${expandedBucket === 'minorDelay'
                 ? 'bg-amber-100/70 border-amber-500 shadow-sm'
                 : 'bg-amber-50/50 border-amber-200 hover:bg-amber-100/40'
-            }`}
+              }`}
           >
             <div className="flex items-center justify-between text-xs font-bold text-amber-900 mb-1">
               <span>{isTe ? 'స్వల్ప ఆలస్యం' : 'Minor Delay'}</span>
@@ -494,11 +490,10 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
           <button
             type="button"
             onClick={() => toggleBucket('warning')}
-            className={`p-3 rounded-2xl border-2 text-left transition-all active:scale-95 ${
-              expandedBucket === 'warning'
+            className={`p-3 rounded-2xl border-2 text-left transition-all active:scale-95 ${expandedBucket === 'warning'
                 ? 'bg-orange-100/70 border-orange-500 shadow-sm'
                 : 'bg-orange-50/50 border-orange-200 hover:bg-orange-100/40'
-            }`}
+              }`}
           >
             <div className="flex items-center justify-between text-xs font-bold text-orange-900 mb-1">
               <span>{isTe ? 'హెచ్చరిక' : 'Warning'}</span>
@@ -515,11 +510,10 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
           <button
             type="button"
             onClick={() => toggleBucket('critical')}
-            className={`p-3 rounded-2xl border-2 text-left transition-all active:scale-95 ${
-              expandedBucket === 'critical'
+            className={`p-3 rounded-2xl border-2 text-left transition-all active:scale-95 ${expandedBucket === 'critical'
                 ? 'bg-rose-100/70 border-rose-500 shadow-sm'
                 : 'bg-rose-50/50 border-rose-200 hover:bg-rose-100/40'
-            }`}
+              }`}
           >
             <div className="flex items-center justify-between text-xs font-bold text-rose-900 mb-1">
               <span>{isTe ? 'తీవ్ర డిఫాల్ట్' : 'Hard Default'}</span>
@@ -671,19 +665,18 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
           </div>
 
           <span
-            className={`px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider border ${
-              concentration.riskLevel === 'high'
+            className={`px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider border ${concentration.riskLevel === 'high'
                 ? 'bg-rose-100 text-rose-900 border-rose-300'
                 : concentration.riskLevel === 'moderate'
-                ? 'bg-amber-100 text-amber-900 border-amber-300'
-                : 'bg-emerald-100 text-emerald-900 border-emerald-300'
-            }`}
+                  ? 'bg-amber-100 text-amber-900 border-amber-300'
+                  : 'bg-emerald-100 text-emerald-900 border-emerald-300'
+              }`}
           >
             {concentration.riskLevel === 'high'
               ? isTe ? 'అధిక రిస్క్' : 'High Risk'
               : concentration.riskLevel === 'moderate'
-              ? isTe ? 'మోస్తరు రిస్క్' : 'Moderate Risk'
-              : isTe ? 'ఆరోగ్యకరం' : 'Healthy'}
+                ? isTe ? 'మోస్తరు రిస్క్' : 'Moderate Risk'
+                : isTe ? 'ఆరోగ్యకరం' : 'Healthy'}
           </span>
         </div>
 
@@ -698,13 +691,12 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
 
           <div className="w-full bg-slate-200 h-3 rounded-full overflow-hidden p-0.5">
             <div
-              className={`h-full rounded-full transition-all duration-700 ${
-                concentration.riskLevel === 'high'
+              className={`h-full rounded-full transition-all duration-700 ${concentration.riskLevel === 'high'
                   ? 'bg-rose-600'
                   : concentration.riskLevel === 'moderate'
-                  ? 'bg-amber-500'
-                  : 'bg-emerald-600'
-              }`}
+                    ? 'bg-amber-500'
+                    : 'bg-emerald-600'
+                }`}
               style={{ width: `${Math.min(100, concentration.top3BorrowersPercent)}%` }}
             />
           </div>
@@ -715,8 +707,8 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
                 ? '⚠️ మీ మొత్తం మూలధనంలో 50% కంటే ఎక్కువ టాప్ 3 వ్యక్తుల వద్దే ఉంది. కొత్త రుణాలను ఇతర చిన్న వ్యాపారులకు విస్తరించడం శ్రేయస్కరం.'
                 : '⚠️ Over 50% of your total loan capital is concentrated in just 3 borrowers. Diversify to reduce default vulnerability.'
               : isTe
-              ? '✓ మీ మూలధన పెట్టుబడి ఆరోగ్యకరంగా విస్తరించబడింది.'
-              : '✓ Capital is well distributed across multiple borrowers.'}
+                ? '✓ మీ మూలధన పెట్టుబడి ఆరోగ్యకరంగా విస్తరించబడింది.'
+                : '✓ Capital is well distributed across multiple borrowers.'}
           </p>
         </div>
 

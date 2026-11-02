@@ -442,9 +442,10 @@ export function calculateEodSummary(
   const efficiencyPercent =
     targetExpected > 0 ? Math.round((actualCollected / targetExpected) * 100) : 0;
 
-  // Loans disbursed on target date (startDate === targetDateStr or created on date)
+  // Loans disbursed on target date (economic occurrence date: startDate)
   const disbursedLoans = loans.filter((l) => {
-    return l.startDate === targetDateStr || l.createdAt.startsWith(targetDateStr);
+    const disbursementDate = l.startDate || l.createdAt.slice(0, 10);
+    return disbursementDate === targetDateStr;
   });
 
   const disbursementItems: EodDisbursementItem[] = disbursedLoans.map((l) => {
