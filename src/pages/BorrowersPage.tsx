@@ -203,6 +203,7 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
 
     const trimmedName = editName.trim();
     const cleanPhone = editPhone.replace(/\D/g, '');
+    const cleanGuarantorPhone = editGuarantorPhone.replace(/\D/g, '');
 
     if (!trimmedName || trimmedName.length < 2) {
       setEditFormError(
@@ -216,8 +217,27 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
     if (!cleanPhone || cleanPhone.length !== 10 || !/^[6-9]/.test(cleanPhone)) {
       setEditFormError(
         isTe
-          ? 'చెల్లని మొబైల్ నంబర్. 10 అంకెలు ఉండాలి మరియు 6-9 తో ప్రారంభం కావాలి.'
-          : 'Invalid mobile number. Must be 10 digits starting with 6-9.'
+          ? 'చెల్లని మొబైల్ నంబర్. 10 అంకెలు ఉండాలి మరియు 6, 7, 8, లేదా 9 తో ప్రారంభం కావాలి.'
+          : 'Invalid mobile number. Must be exactly 10 digits starting with 6, 7, 8, or 9.'
+      );
+      return;
+    }
+
+    // Validate guarantor phone if entered
+    if (cleanGuarantorPhone && (cleanGuarantorPhone.length !== 10 || !/^[6-9]/.test(cleanGuarantorPhone))) {
+      setEditFormError(
+        isTe
+          ? 'హామీదారు మొబైల్ నంబర్ చెల్లదు. ఖచ్చితంగా 10 అంకెలు ఉండాలి మరియు 6, 7, 8, లేదా 9 తో ప్రారంభం కావాలి (లేదా ఖాళీగా ఉంచండి).'
+          : 'Invalid guarantor phone number. Must be exactly 10 digits starting with 6-9, or leave blank.'
+      );
+      return;
+    }
+
+    if (cleanGuarantorPhone && cleanGuarantorPhone === cleanPhone) {
+      setEditFormError(
+        isTe
+          ? 'హామీదారు ఫోన్ నంబర్ రుణగ్రహీత ఫోన్ నంబర్‌తో సమానంగా ఉండకూడదు.'
+          : 'Guarantor phone number cannot be the same as the borrower phone number.'
       );
       return;
     }
@@ -263,8 +283,31 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
       );
       await loadBorrowers();
     } catch (err: unknown) {
-      setEditFormError(err instanceof Error ? err.message : 'Update failed');
       setIsEditConfirmationOpen(false);
+      let userFriendlyMsg = isTe ? 'వివరాలు నవీకరించడం విఫలమైంది.' : 'Failed to update borrower details.';
+      if (err instanceof Error) {
+        if (err.message.includes('guarantorPhone') || err.message.includes('leave blank')) {
+          userFriendlyMsg = isTe
+            ? 'హామీదారు మొబైల్ నంబర్ చెల్లదు. ఖచ్చితంగా 10 అంకెలు ఉండాలి మరియు 6, 7, 8, లేదా 9 తో ప్రారంభం కావాలి (లేదా ఖాళీగా ఉంచండి).'
+            : 'Invalid guarantor phone number. Must be 10 digits starting with 6-9, or leave blank.';
+        } else if (err.message.includes('already registered') || err.message.includes('already exists')) {
+          userFriendlyMsg = isTe
+            ? 'ఈ మొబైల్ నంబర్ ఇప్పటికే మరొక ఖాతాదారుడికి నమోదు చేయబడింది.'
+            : 'This mobile number is already registered to another borrower.';
+        } else {
+          try {
+            const parsed = JSON.parse(err.message);
+            if (Array.isArray(parsed) && parsed[0]?.message) {
+              userFriendlyMsg = parsed[0].message;
+            } else {
+              userFriendlyMsg = err.message;
+            }
+          } catch {
+            userFriendlyMsg = err.message;
+          }
+        }
+      }
+      setEditFormError(userFriendlyMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -364,6 +407,24 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
       return;
     }
 
+    if (cleanGuarantorPhone && (cleanGuarantorPhone.length !== 10 || !/^[6-9]/.test(cleanGuarantorPhone))) {
+      setFormError(
+        isTe
+          ? 'హామీదారు మొబైల్ నంబర్ చెల్లదు. ఖచ్చితంగా 10 అంకెలు ఉండాలి మరియు 6, 7, 8, లేదా 9 తో ప్రారంభం కావాలి (లేదా ఖాళీగా ఉంచండి).'
+          : 'Invalid guarantor mobile number. It must be exactly 10 digits starting with 6, 7, 8, or 9 (or leave blank).'
+      );
+      return;
+    }
+
+    if (cleanGuarantorPhone && cleanGuarantorPhone === cleanPhone) {
+      setFormError(
+        isTe
+          ? 'హామీదారు ఫోన్ నంబర్ రుణగ్రహీత ఫోన్ నంబర్‌తో సమానంగా ఉండకూడదు.'
+          : 'Guarantor phone number cannot be the same as borrower phone number.'
+      );
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -391,14 +452,29 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
       await loadBorrowers();
     } catch (err: unknown) {
       if (err instanceof Error) {
-        if (err.message.includes('already exists')) {
+        if (err.message.includes('already exists') || err.message.includes('already registered')) {
           setFormError(
             isTe
               ? `ఈ మొబైల్ నంబర్ (+91 ${cleanPhone}) ఇప్పటికే నమోదు చేయబడింది.`
               : `A borrower with phone +91 ${cleanPhone} already exists.`
           );
+        } else if (err.message.includes('guarantorPhone') || err.message.includes('leave blank')) {
+          setFormError(
+            isTe
+              ? 'హామీదారు మొబైల్ నంబర్ చెల్లదు. ఖచ్చితంగా 10 అంకెలు ఉండాలి మరియు 6-9 తో ప్రారంభం కావాలి.'
+              : 'Invalid guarantor phone number. Must be 10 digits starting with 6-9, or leave blank.'
+          );
         } else {
-          setFormError(err.message);
+          try {
+            const parsed = JSON.parse(err.message);
+            if (Array.isArray(parsed) && parsed[0]?.message) {
+              setFormError(parsed[0].message);
+            } else {
+              setFormError(err.message);
+            }
+          } catch {
+            setFormError(err.message);
+          }
         }
       } else {
         setFormError(isTe ? 'భద్రపరచడం విఫలమైంది.' : 'Failed to save borrower.');
