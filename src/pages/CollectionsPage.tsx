@@ -45,7 +45,7 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
   const [items, setItems] = useState<CollectionItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'paid' | 'partial' | 'missed'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'paid' | 'missed'>('all');
 
   // Partial Payment Modal State
   const [modalItem, setModalItem] = useState<CollectionItem | null>(null);
@@ -277,9 +277,15 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
   // - Within each group, items are sorted alphabetically by borrower name.
   const filteredItems = useMemo(() => {
     const list = items.filter((item) => {
-      // 1. Status Filter
-      if (statusFilter !== 'all' && item.schedule.status !== statusFilter) {
-        return false;
+      // 1. Status Filter (Collected 'paid' tab includes both full paid and partial collections)
+      if (statusFilter !== 'all') {
+        if (statusFilter === 'paid') {
+          if (item.schedule.status !== 'paid' && item.schedule.status !== 'partial') {
+            return false;
+          }
+        } else if (item.schedule.status !== statusFilter) {
+          return false;
+        }
       }
 
       // 2. Search Query (name or phone)
@@ -453,30 +459,32 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
         />
       </div>
 
-      {/* Status Filter Chips */}
-      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none text-xs font-bold">
+      {/* 4-Tab Unified Status Filter (Fits 100% of Screen, Zero Scroll) */}
+      <div className="grid grid-cols-4 gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200 text-xs font-bold">
         {[
           { id: 'all', labelTe: 'అన్నీ', labelEn: 'All', count: metrics.counts.all },
           { id: 'pending', labelTe: 'బాకీ', labelEn: 'Pending', count: metrics.counts.pending },
-          { id: 'paid', labelTe: 'పూర్తయింది', labelEn: 'Paid', count: metrics.counts.paid },
-          { id: 'partial', labelTe: 'కొంత భాగం', labelEn: 'Partial', count: metrics.counts.partial },
+          { id: 'paid', labelTe: 'వసూలు', labelEn: 'Collected', count: metrics.counts.paid + metrics.counts.partial },
           { id: 'missed', labelTe: 'తప్పింది', labelEn: 'Missed', count: metrics.counts.missed },
         ].map((tab) => {
           const isActive = statusFilter === tab.id;
           return (
             <button
               key={tab.id}
+              type="button"
               onClick={() => setStatusFilter(tab.id as typeof statusFilter)}
-              className={`min-h-[48px] px-4 rounded-xl whitespace-nowrap transition-all flex items-center gap-2 ${
+              className={`min-h-[48px] px-1 py-1 rounded-xl transition-all flex flex-col items-center justify-center leading-tight active:scale-95 ${
                 isActive
-                  ? 'bg-teal-800 text-white shadow-sm'
-                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                  ? 'bg-teal-800 text-white shadow-md'
+                  : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200/60'
               }`}
             >
-              <span>{isTe ? tab.labelTe : tab.labelEn}</span>
+              <span className="font-extrabold text-[12px] truncate">
+                {isTe ? tab.labelTe : tab.labelEn}
+              </span>
               <span
-                className={`text-[11px] px-2 py-0.5 rounded-full font-black ${
-                  isActive ? 'bg-teal-900 text-teal-200' : 'bg-slate-100 text-slate-600'
+                className={`text-[11px] font-black px-1.5 py-0.5 rounded-full mt-0.5 ${
+                  isActive ? 'bg-teal-950 text-teal-200' : 'bg-slate-100 text-slate-700'
                 }`}
               >
                 {tab.count}
