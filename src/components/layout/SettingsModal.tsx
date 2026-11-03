@@ -8,14 +8,25 @@ import {
   CheckCircle2,
   HardDrive,
   User,
+  Lock,
+  Fingerprint,
 } from 'lucide-react';
 import { db } from '../../db/dexie';
+import {
+  getSecurityConfig,
+  toggleBiometricsConfig,
+  setAutoLockMinutesConfig,
+  SecurityConfig,
+} from '../../utils/security';
+import { isBiometricsSupported } from '../../utils/biometrics';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   language: 'en' | 'te';
   onToggleLanguage: () => void;
+  onChangePin?: () => void;
+  onLockNow?: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -23,6 +34,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   language,
   onToggleLanguage,
+  onChangePin,
+  onLockNow,
 }) => {
   const isTe = language === 'te';
 
@@ -35,9 +48,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [lenderName, setLenderName] = useState('My Lending Business');
   const [defaultSkipSundays, setDefaultSkipSundays] = useState(true);
   const [isSaved, setIsSaved] = useState(false);
+  const [securityConfig, setSecurityConfig] = useState<SecurityConfig>(() => getSecurityConfig());
+  const [isBioSupported, setIsBioSupported] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
+      setSecurityConfig(getSecurityConfig());
+      isBiometricsSupported().then(setIsBioSupported);
       Promise.all([
         db.borrowers.count(),
         db.loans.count(),
@@ -186,7 +203,116 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
         </div>
 
-        {/* 4. Local Storage Vault Status */}
+        {/* 4. Security & PIN Lock Section */}
+        <div className="space-y-3 pt-3 border-t border-slate-100">
+          <div className="flex items-center space-x-2 text-slate-700">
+            <Lock className="h-4 w-4 text-brand-700" />
+            <h4 className="text-xs font-bold uppercase tracking-wider">
+              {isTe ? 'భద్రత & పిన్ లాక్' : 'Security & App Lock'}
+            </h4>
+          </div>
+
+          <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-200 space-y-3">
+            {/* PIN Status & Change/Set Button */}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-bold text-slate-800">
+                  {isTe ? '4-అంకెల సెక్యూరిటీ పిన్' : '4-Digit Security PIN'}
+                </p>
+                <p className="text-xs font-semibold text-slate-500">
+                  {securityConfig.isConfigured
+                    ? isTe ? '✓ సక్రియంగా ఉంది (Protected)' : '✓ Active & Protected'
+                    : isTe ? '⚠️ సెట్ చేయలేదు (Not Set)' : '⚠️ Not Set'}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onChangePin?.();
+                }}
+                className="px-3 min-h-[44px] rounded-xl bg-teal-50 border border-teal-200 text-teal-800 font-bold text-xs hover:bg-teal-100 active:scale-95 transition-all flex items-center justify-center"
+              >
+                {securityConfig.isConfigured
+                  ? isTe ? 'పిన్ మార్చండి' : 'Change PIN'
+                  : isTe ? 'పిన్ సెట్ చేయండి' : 'Set PIN'}
+              </button>
+            </div>
+
+            {/* Biometric Toggle (if supported on hardware) */}
+            {isBioSupported && (
+              <div className="flex items-center justify-between pt-2 border-t border-slate-200/60">
+                <div className="flex items-center gap-2">
+                  <Fingerprint className="h-5 w-5 text-teal-700 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">
+                      {isTe ? 'వేలిముద్ర లాక్ (Biometric)' : 'Fingerprint / Touch'}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {isTe ? 'టచ్ సెన్సార్‌తో వేగంగా తెరవండి' : 'Unlock quickly with fingerprint'}
+                    </p>
+                  </div>
+                </div>
+
+                <input
+                  type="checkbox"
+                  checked={securityConfig.biometricsEnabled}
+                  onChange={(e) => {
+                    toggleBiometricsConfig(e.target.checked);
+                    setSecurityConfig(getSecurityConfig());
+                  }}
+                  className="h-6 w-6 rounded text-brand-700 focus:ring-brand-500 cursor-pointer"
+                />
+              </div>
+            )}
+
+            {/* Inactivity Auto-Lock Selector */}
+            <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-bold text-slate-800">
+                  {isTe ? 'ఆటో-లాక్ సమయం' : 'Auto-Lock Time'}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {isTe ? 'స్క్రీన్ తాకకపోతే లాక్ చేయండి' : 'Lock screen after inactivity'}
+                </p>
+              </div>
+
+              <select
+                value={securityConfig.autoLockMinutes}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  setAutoLockMinutesConfig(val);
+                  setSecurityConfig(getSecurityConfig());
+                }}
+                className="px-2.5 min-h-[40px] rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-teal-600 focus:outline-none"
+              >
+                <option value={1}>1 {isTe ? 'నిమిషం' : 'min'}</option>
+                <option value={2}>2 {isTe ? 'నిమిషాలు' : 'mins'}</option>
+                <option value={5}>5 {isTe ? 'నిమిషాలు' : 'mins'}</option>
+              </select>
+            </div>
+
+            {/* Lock Now Quick Action */}
+            {securityConfig.isConfigured && onLockNow && (
+              <div className="pt-2 border-t border-slate-200/60">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onLockNow();
+                  }}
+                  className="w-full min-h-[46px] rounded-xl bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-800 font-bold text-xs flex items-center justify-center gap-1.5 transition-all"
+                >
+                  <Lock size={15} />
+                  <span>{isTe ? 'ఇప్పుడే యాప్‌ను లాక్ చేయి' : 'Lock App Now'}</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 5. Local Storage Vault Status */}
         <div className="space-y-3 pt-3 border-t border-slate-100">
           <div className="flex items-center space-x-2 text-slate-700">
             <HardDrive className="h-4 w-4 text-brand-700" />

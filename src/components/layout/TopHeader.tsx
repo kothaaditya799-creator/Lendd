@@ -1,10 +1,11 @@
 import React from 'react';
-import { Cloud, Check, ShieldCheck, Settings } from 'lucide-react';
+import { Cloud, Check, ShieldCheck, Settings, Lock } from 'lucide-react';
 
 interface TopHeaderProps {
   currentLanguage: 'en' | 'te';
   onToggleLanguage: () => void;
   onOpenSettings: () => void;
+  onLock?: () => void;
   isOnline?: boolean;
 }
 
@@ -12,6 +13,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   currentLanguage,
   onToggleLanguage,
   onOpenSettings,
+  onLock,
   isOnline = true,
 }) => {
   return (
@@ -59,6 +61,18 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         >
           {currentLanguage === 'te' ? 'EN' : 'తెలుగు'}
         </button>
+
+        {/* Quick Lock Button */}
+        {onLock && (
+          <button
+            onClick={onLock}
+            aria-label="Lock App"
+            title={currentLanguage === 'te' ? 'యాప్‌ను లాక్ చేయండి' : 'Lock App'}
+            className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-800 text-brand-100 shadow-sm hover:bg-brand-900 active:scale-95 transition-transform"
+          >
+            <Lock className="h-4 w-4" />
+          </button>
+        )}
 
         {/* Settings Gear Button (44-56px hit target) */}
         <button

@@ -10,6 +10,7 @@ interface AppShellProps {
   language: 'en' | 'te';
   onToggleLanguage: () => void;
   onOpenSettings: () => void;
+  onLock?: () => void;
   isOnline?: boolean;
 }
 
@@ -20,6 +21,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   language,
   onToggleLanguage,
   onOpenSettings,
+  onLock,
   isOnline = true,
 }) => {
   return (
@@ -30,6 +32,7 @@ export const AppShell: React.FC<AppShellProps> = ({
           currentLanguage={language}
           onToggleLanguage={onToggleLanguage}
           onOpenSettings={onOpenSettings}
+          onLock={onLock}
           isOnline={isOnline}
         />
 
