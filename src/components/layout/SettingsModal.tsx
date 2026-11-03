@@ -18,7 +18,7 @@ import {
   setAutoLockMinutesConfig,
   SecurityConfig,
 } from '../../utils/security';
-import { isBiometricsSupported } from '../../utils/biometrics';
+import { isBiometricsSupported, registerBiometricCredential } from '../../utils/biometrics';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -258,8 +258,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <input
                   type="checkbox"
                   checked={securityConfig.biometricsEnabled}
-                  onChange={(e) => {
-                    toggleBiometricsConfig(e.target.checked);
+                  onChange={async (e) => {
+                    const willEnable = e.target.checked;
+                    if (willEnable) {
+                      const credId = await registerBiometricCredential();
+                      if (credId) {
+                        toggleBiometricsConfig(true, credId);
+                      } else {
+                        toggleBiometricsConfig(false);
+                      }
+                    } else {
+                      toggleBiometricsConfig(false);
+                    }
                     setSecurityConfig(getSecurityConfig());
                   }}
                   className="h-6 w-6 rounded text-brand-700 focus:ring-brand-500 cursor-pointer"

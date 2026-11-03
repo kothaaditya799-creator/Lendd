@@ -49,7 +49,12 @@ export const PinLockScreen: React.FC<PinLockScreenProps> = ({
   const [firstStepPin, setFirstStepPin] = useState<string>(''); // For setup confirmation
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isShaking, setIsShaking] = useState<boolean>(false);
-  const [lockoutSeconds, setLockoutSeconds] = useState<number>(0);
+  const [lockoutSeconds, setLockoutSeconds] = useState<number>(() => {
+    if (config.lockoutUntil && config.lockoutUntil > Date.now()) {
+      return Math.ceil((config.lockoutUntil - Date.now()) / 1000);
+    }
+    return 0;
+  });
   const [isBiometricsAvailable, setIsBiometricsAvailable] = useState<boolean>(false);
 
   // Recovery flow states
@@ -184,6 +189,17 @@ export const PinLockScreen: React.FC<PinLockScreenProps> = ({
       return;
     }
 
+    // Security Check: Match against registered recovery phone if configured
+    const registered = config.recoveryPhone?.replace(/\D/g, '');
+    if (registered && cleanPhone !== registered) {
+      setErrorMsg(
+        isTe
+          ? 'నమోదిత రికవరీ మొబైల్ నంబర్ సరిపోలడం లేదు.'
+          : 'Does not match registered recovery phone number.'
+      );
+      return;
+    }
+
     // Generate 6-digit verification code
     const generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
     setSimulatedOtpCode(generatedCode);
@@ -191,9 +207,9 @@ export const PinLockScreen: React.FC<PinLockScreenProps> = ({
     setErrorMsg(null);
   };
 
-  // Recovery: Verify OTP handler
+  // Recovery: Verify OTP handler (No hardcoded backdoors)
   const handleVerifyOtp = () => {
-    if (recoveryOtpInput.trim() === simulatedOtpCode || recoveryOtpInput.trim() === '123456') {
+    if (recoveryOtpInput.trim() && recoveryOtpInput.trim() === simulatedOtpCode) {
       // Authorized: Reset to setup new PIN
       setErrorMsg(null);
       setIsOtpSent(false);
@@ -423,11 +439,14 @@ export const PinLockScreen: React.FC<PinLockScreenProps> = ({
               ) : (
                 <div className="space-y-2">
                   <div className="bg-emerald-950/60 border border-emerald-500/40 p-2.5 rounded-xl text-[11px] text-emerald-200">
-                    <p className="font-bold">
-                      {isTe ? 'ఓటీపీ పంపబడింది!' : 'OTP Sent!'}
+                    <p className="font-bold flex items-center gap-1.5">
+                      <span>✓</span>
+                      <span>{isTe ? 'ఓటీపీ పంపబడింది!' : 'Verification Code Sent!'}</span>
                     </p>
                     <p className="text-[10px] text-emerald-300 mt-0.5">
-                      {isTe ? `డెమో కోడ్: ${simulatedOtpCode} (లేదా 123456)` : `Demo OTP: ${simulatedOtpCode} (or 123456)`}
+                      {isTe
+                        ? `నమోదిత మొబైల్ (+91 ${recoveryPhoneInput}) కి పంపబడిన 6-అంకెల కోడ్ నమోదు చేయండి.`
+                        : `Enter the 6-digit code sent to registered mobile (+91 ${recoveryPhoneInput}).`}
                     </p>
                   </div>
 

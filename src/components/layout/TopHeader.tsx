@@ -62,23 +62,23 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           {currentLanguage === 'te' ? 'EN' : 'తెలుగు'}
         </button>
 
-        {/* Quick Lock Button */}
+        {/* Quick Lock Button (44px touch target) */}
         {onLock && (
           <button
             onClick={onLock}
             aria-label="Lock App"
             title={currentLanguage === 'te' ? 'యాప్‌ను లాక్ చేయండి' : 'Lock App'}
-            className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-800 text-brand-100 shadow-sm hover:bg-brand-900 active:scale-95 transition-transform"
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl bg-brand-800 text-brand-100 shadow-sm hover:bg-brand-900 active:scale-95 transition-transform"
           >
-            <Lock className="h-4 w-4" />
+            <Lock className="h-5 w-5" />
           </button>
         )}
 
-        {/* Settings Gear Button (44-56px hit target) */}
+        {/* Settings Gear Button (44px hit target) */}
         <button
           onClick={onOpenSettings}
           aria-label="Open Settings"
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-800 text-brand-100 shadow-sm hover:bg-brand-900 active:scale-95 transition-transform"
+          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl bg-brand-800 text-brand-100 shadow-sm hover:bg-brand-900 active:scale-95 transition-transform"
         >
           <Settings className="h-5 w-5" />
         </button>

@@ -8,6 +8,7 @@ import { InsightsPage } from './pages/InsightsPage';
 import { SettingsModal } from './components/layout/SettingsModal';
 import { PinLockScreen } from './components/security/PinLockScreen';
 import { useAutoLock } from './hooks/useAutoLock';
+import { getSecurityConfig } from './utils/security';
 import { Shield } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -19,6 +20,15 @@ export const App: React.FC = () => {
 
   // Phase 6: Auto-Lock, Inactivity and Background Grace Protection
   const { isLocked, lock, unlock, isPrivacyCurtainVisible } = useAutoLock();
+
+  const handleLock = () => {
+    const cfg = getSecurityConfig();
+    if (cfg.isConfigured) {
+      lock();
+    } else {
+      setIsChangingPin(true);
+    }
+  };
 
   const handleToggleLanguage = () => {
     setLanguage((prev) => (prev === 'en' ? 'te' : 'en'));
@@ -71,7 +81,7 @@ export const App: React.FC = () => {
         language={language}
         onToggleLanguage={handleToggleLanguage}
         onOpenSettings={() => setIsSettingsOpen(true)}
-        onLock={lock}
+        onLock={handleLock}
         isOnline={true}
       >
         {renderCurrentView()}

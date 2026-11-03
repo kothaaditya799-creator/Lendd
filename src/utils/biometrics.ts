@@ -3,11 +3,32 @@
  * 
  * Provides:
  * - Device platform authenticator check (Touch ID, Face ID, Android Biometric Prompt)
- * - WebAuthn API credential assertion / verification
- * - 1-tap fast unlock fallback
+ * - WebAuthn API platform credential registration & verification
+ * - 1-tap fast unlock with credential binding
  */
 
 import { getSecurityConfig } from './security';
+
+/**
+ * Helper to encode / decode base64 for credential IDs.
+ */
+function bufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return window.btoa(binary);
+}
+
+function base64ToBuffer(base64: string): ArrayBuffer {
+  const binary = window.atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
 
 /**
  * Check if the current device/browser supports hardware biometric verification.
@@ -30,8 +51,63 @@ export async function isBiometricsSupported(): Promise<boolean> {
 }
 
 /**
+ * Register a WebAuthn platform authenticator credential on this device.
+ * Called when the user enables Biometrics in Settings.
+ */
+export async function registerBiometricCredential(
+  userId: string = 'lendtrack-owner'
+): Promise<string | null> {
+  if (typeof window === 'undefined' || !window.PublicKeyCredential || !navigator.credentials?.create) {
+    return null;
+  }
+
+  const supported = await isBiometricsSupported();
+  if (!supported) return null;
+
+  try {
+    const challenge = new Uint8Array(32);
+    window.crypto.getRandomValues(challenge);
+
+    const userHandle = new Uint8Array(16);
+    window.crypto.getRandomValues(userHandle);
+
+    const credential = (await navigator.credentials.create({
+      publicKey: {
+        challenge,
+        rp: {
+          name: 'LendTrack Secure Ledger',
+          id: window.location.hostname || 'localhost',
+        },
+        user: {
+          id: userHandle,
+          name: userId,
+          displayName: 'LendTrack Business Owner',
+        },
+        pubKeyCredParams: [
+          { alg: -7, type: 'public-key' }, // ES256
+          { alg: -257, type: 'public-key' }, // RS256
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: 'platform',
+          userVerification: 'required',
+        },
+        timeout: 60000,
+      },
+    })) as PublicKeyCredential | null;
+
+    if (credential && credential.rawId) {
+      return bufferToBase64(credential.rawId);
+    }
+  } catch (err: unknown) {
+    console.warn('Biometric credential creation cancelled or failed:', err);
+  }
+
+  return null;
+}
+
+/**
  * Trigger Biometric Authentication (Touch ID / Face ID / Fingerprint sensor).
- * Returns true if authenticated successfully, false otherwise.
+ * Uses registered platform credential to verify identity.
  */
 export async function authenticateWithBiometrics(
   _promptReason: string = 'Unlock LendTrack'
@@ -42,33 +118,42 @@ export async function authenticateWithBiometrics(
   }
 
   const supported = await isBiometricsSupported();
-  if (!supported) {
-    // In simulation or dev mode without hardware platform authenticator,
-    // we can still verify if biometrics were enabled by user
+  if (!supported || typeof window === 'undefined' || !navigator.credentials?.get) {
     return false;
   }
 
   try {
-    // Challenge-based credential assertion request using WebAuthn
     const challenge = new Uint8Array(32);
-    if (window.crypto && window.crypto.getRandomValues) {
-      window.crypto.getRandomValues(challenge);
-    }
+    window.crypto.getRandomValues(challenge);
 
-    const options: CredentialRequestOptions = {
-      publicKey: {
-        challenge,
-        timeout: 60000,
-        userVerification: 'required',
-        rpId: window.location.hostname || 'localhost',
-      },
+    const publicKeyOptions: PublicKeyCredentialRequestOptions = {
+      challenge,
+      timeout: 60000,
+      userVerification: 'required',
+      rpId: window.location.hostname || 'localhost',
     };
 
-    // Attempt navigator.credentials.get
-    const assertion = await navigator.credentials.get(options);
+    // If an existing registered credential ID is stored, bind to it
+    if (config.biometricCredentialId) {
+      try {
+        const rawBuffer = base64ToBuffer(config.biometricCredentialId);
+        publicKeyOptions.allowCredentials = [
+          {
+            id: rawBuffer,
+            type: 'public-key',
+          },
+        ];
+      } catch {
+        // Continue without allowCredentials restriction
+      }
+    }
+
+    const assertion = await navigator.credentials.get({
+      publicKey: publicKeyOptions,
+    });
+
     return !!assertion;
   } catch (err: unknown) {
-    // NotAllowedError (user cancelled / biometric failed) or SecurityError
     console.warn('Biometric authentication cancelled or failed:', err);
     return false;
   }

@@ -15,6 +15,7 @@ export interface SecurityConfig {
   pinHash: string;
   salt: string;
   biometricsEnabled: boolean;
+  biometricCredentialId?: string;
   autoLockMinutes: number; // e.g. 1, 2, 5
   failedAttempts: number;
   lockoutUntil: number | null; // epoch ms
@@ -245,9 +246,13 @@ export async function changeExistingPin(oldPin: string, newPin: string): Promise
 /**
  * Toggle Biometric unlock authorization.
  */
-export function toggleBiometricsConfig(enabled: boolean): void {
+export function toggleBiometricsConfig(enabled: boolean, credentialId?: string): void {
   const current = getSecurityConfig();
-  saveSecurityConfig({ ...current, biometricsEnabled: enabled });
+  saveSecurityConfig({
+    ...current,
+    biometricsEnabled: enabled,
+    biometricCredentialId: enabled ? credentialId || current.biometricCredentialId : undefined,
+  });
 }
 
 /**
@@ -281,12 +286,7 @@ export async function emergencyWipeAllData(): Promise<void> {
   try {
     if (typeof window !== 'undefined') {
       const { db } = await import('../db/dexie');
-      await Promise.all([
-        db.borrowers.clear(),
-        db.loans.clear(),
-        db.schedules.clear(),
-        db.syncQueue.clear(),
-      ]);
+      await db.clearAllData();
     }
   } catch (err) {
     console.error('Failed to clear database during emergency wipe:', err);
