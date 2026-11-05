@@ -12,6 +12,9 @@ interface AppShellProps {
   onOpenSettings: () => void;
   onLock?: () => void;
   isOnline?: boolean;
+  isSyncing?: boolean;
+  pendingCount?: number;
+  onTriggerSync?: () => void;
 }
 
 export const AppShell: React.FC<AppShellProps> = ({
@@ -23,6 +26,9 @@ export const AppShell: React.FC<AppShellProps> = ({
   onOpenSettings,
   onLock,
   isOnline = true,
+  isSyncing = false,
+  pendingCount = 0,
+  onTriggerSync,
 }) => {
   return (
     <div className="flex min-h-screen justify-center bg-slate-200">
@@ -34,6 +40,9 @@ export const AppShell: React.FC<AppShellProps> = ({
           onOpenSettings={onOpenSettings}
           onLock={onLock}
           isOnline={isOnline}
+          isSyncing={isSyncing}
+          pendingCount={pendingCount}
+          onTriggerSync={onTriggerSync}
         />
 
         {/* Scrollable Content View with bottom padding so Nav doesn't overlap */}

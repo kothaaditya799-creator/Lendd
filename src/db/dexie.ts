@@ -1,10 +1,10 @@
-import Dexie, { Table } from 'dexie';
-import {
+import Dexie, { type Table } from 'dexie';
+import type {
   Borrower,
   Loan,
   PaymentSchedule,
   SyncQueueItem,
-} from '../types/domain';
+} from '../types/domain.ts';
 
 export class LendTrackDatabase extends Dexie {
   borrowers!: Table<Borrower, string>;

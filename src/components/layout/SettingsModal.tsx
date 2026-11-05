@@ -10,6 +10,11 @@ import {
   User,
   Lock,
   Fingerprint,
+  Cloud,
+  RefreshCw,
+  Download,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { db } from '../../db/dexie';
 import {
@@ -19,6 +24,16 @@ import {
   SecurityConfig,
 } from '../../utils/security';
 import { isBiometricsSupported, registerBiometricCredential } from '../../utils/biometrics';
+import {
+  getSupabaseConfig,
+  saveSupabaseConfig,
+} from '../../db/supabaseClient';
+import {
+  canPromptPwaInstall,
+  promptPwaInstall,
+  subscribePwaInstall,
+  isStandalonePwa,
+} from '../../utils/pwaRegistration';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -27,6 +42,11 @@ interface SettingsModalProps {
   onToggleLanguage: () => void;
   onChangePin?: () => void;
   onLockNow?: () => void;
+  isOnline?: boolean;
+  isSyncing?: boolean;
+  pendingCount?: number;
+  lastSyncTimestamp?: number | null;
+  onTriggerSync?: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -36,6 +56,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onToggleLanguage,
   onChangePin,
   onLockNow,
+  isOnline = true,
+  isSyncing = false,
+  pendingCount = 0,
+  lastSyncTimestamp = null,
+  onTriggerSync,
 }) => {
   const isTe = language === 'te';
 
@@ -51,10 +76,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [securityConfig, setSecurityConfig] = useState<SecurityConfig>(() => getSecurityConfig());
   const [isBioSupported, setIsBioSupported] = useState(false);
 
+  // PWA & Cloud Sync configuration state
+  const [canInstallPwa, setCanInstallPwa] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [showCloudConfig, setShowCloudConfig] = useState(false);
+  const [cloudUrl, setCloudUrl] = useState('');
+  const [cloudAnonKey, setCloudAnonKey] = useState('');
+  const [cloudSaved, setCloudSaved] = useState(false);
+
   useEffect(() => {
     if (isOpen) {
       setSecurityConfig(getSecurityConfig());
       isBiometricsSupported().then(setIsBioSupported);
+      const cfg = getSupabaseConfig();
+      if (cfg) {
+        setCloudUrl(cfg.url);
+        setCloudAnonKey(cfg.anonKey);
+      }
+      setIsStandalone(isStandalonePwa());
+      setCanInstallPwa(canPromptPwaInstall());
+      const unsub = subscribePwaInstall((can) => setCanInstallPwa(can));
+
       Promise.all([
         db.borrowers.count(),
         db.loans.count(),
@@ -64,8 +106,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         setLoanCount(lCount);
         setScheduleCount(sCount);
       });
+
+      return () => {
+        unsub();
+      };
     }
   }, [isOpen]);
+
+  const handleSaveCloudConfig = () => {
+    if (cloudUrl.trim() && cloudAnonKey.trim()) {
+      saveSupabaseConfig({ url: cloudUrl.trim(), anonKey: cloudAnonKey.trim() });
+      setCloudSaved(true);
+      setTimeout(() => setCloudSaved(false), 2000);
+      if (onTriggerSync) onTriggerSync();
+    }
+  };
+
+  const handleInstallClick = async () => {
+    const accepted = await promptPwaInstall();
+    if (accepted) {
+      setCanInstallPwa(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -322,7 +384,132 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
         </div>
 
-        {/* 5. Local Storage Vault Status */}
+        {/* 5. Cloud Sync & PWA Mobile App */}
+        <div className="space-y-3 pt-3 border-t border-slate-100">
+          <div className="flex items-center space-x-2 text-slate-700">
+            <Cloud className="h-4 w-4 text-brand-700" />
+            <h4 className="text-xs font-bold uppercase tracking-wider">
+              {isTe ? 'క్లౌడ్ సింక్ & మొబైల్ యాప్' : 'Cloud Sync & Mobile App'}
+            </h4>
+          </div>
+
+          <div className="rounded-xl bg-slate-50 p-4 border border-slate-200 space-y-3">
+            {/* Live Connection & Queue State */}
+            <div className="flex items-center justify-between text-xs font-semibold">
+              <span className="text-slate-600">{isTe ? 'కనెక్టివిటీ స్థితి:' : 'Network Status:'}</span>
+              <span className={`flex items-center gap-1 font-bold ${isOnline ? 'text-emerald-700' : 'text-amber-700'}`}>
+                {isOnline ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>{isTe ? 'ఆన్‌లైన్ (కనెక్ట్ అయింది)' : 'Online (Connected)'}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    <span>{isTe ? 'ఆఫ్‌లైన్ (లోకల్ మోడ్)' : 'Offline (Local-First)'}</span>
+                  </>
+                )}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between text-xs font-semibold">
+              <span className="text-slate-600">{isTe ? 'సింక్ బాకీ ఉన్న మార్పులు:' : 'Pending Sync Queue:'}</span>
+              <span className={`font-bold ${pendingCount > 0 ? 'text-amber-700' : 'text-slate-900'}`}>
+                {pendingCount} {isTe ? 'రికార్డులు' : 'items'}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between text-xs font-semibold">
+              <span className="text-slate-600">{isTe ? 'చివరిసారి సింక్:' : 'Last Synced:'}</span>
+              <span className="font-bold text-slate-700">
+                {lastSyncTimestamp
+                  ? new Date(lastSyncTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  : isTe ? 'ఇంకా లేదు' : 'Never'}
+              </span>
+            </div>
+
+            {/* Manual Sync Trigger Button (50px min touch target) */}
+            <button
+              type="button"
+              disabled={isSyncing || (!isOnline && pendingCount === 0)}
+              onClick={onTriggerSync}
+              className="w-full min-h-[50px] rounded-xl bg-teal-700 hover:bg-teal-800 disabled:opacity-50 active:scale-95 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
+            >
+              <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
+              <span>
+                {isSyncing
+                  ? isTe ? 'క్లౌడ్‌తో సింక్ అవుతోంది...' : 'Syncing with cloud...'
+                  : isTe ? 'ఇప్పుడే క్లౌడ్‌తో సింక్ చేయి' : 'Sync Now with Cloud'}
+              </span>
+            </button>
+
+            {/* PWA Install Button (If browser supports beforeinstallprompt and not standalone) */}
+            {canInstallPwa && !isStandalone && (
+              <button
+                type="button"
+                onClick={handleInstallClick}
+                className="w-full min-h-[48px] rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
+              >
+                <Download size={16} />
+                <span>{isTe ? 'యాప్‌ను ఫోన్‌లో ఇన్‌స్టాల్ చేయండి' : 'Install LendTrack on Phone'}</span>
+              </button>
+            )}
+
+            {/* Collapsible Supabase Cloud Configuration */}
+            <div className="pt-2 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setShowCloudConfig((prev) => !prev)}
+                className="w-full flex items-center justify-between text-xs font-bold text-slate-600 hover:text-slate-900 py-1"
+              >
+                <span>{isTe ? 'క్లౌడ్ డేటాబేస్ సెట్టింగ్‌లు (Supabase)' : 'Cloud Database Settings (Supabase)'}</span>
+                {showCloudConfig ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </button>
+
+              {showCloudConfig && (
+                <div className="pt-2 space-y-2 text-xs animate-fade-in">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      Supabase Project URL
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://xyz.supabase.co"
+                      value={cloudUrl}
+                      onChange={(e) => setCloudUrl(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs text-slate-900 focus:ring-2 focus:ring-teal-500 font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      Supabase Anon / Public Key
+                    </label>
+                    <input
+                      type="password"
+                      placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                      value={cloudAnonKey}
+                      onChange={(e) => setCloudAnonKey(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs text-slate-900 focus:ring-2 focus:ring-teal-500 font-mono"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveCloudConfig}
+                    className="w-full min-h-[42px] rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs active:scale-95 transition-all mt-1"
+                  >
+                    {cloudSaved
+                      ? isTe ? '✓ క్లౌడ్ కీలు భద్రపరచబడ్డాయి!' : '✓ Cloud Keys Saved!'
+                      : isTe ? 'క్లౌడ్ కనెక్షన్‌ను భద్రపరచు' : 'Save Cloud Connection'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 6. Local Storage Vault Status */}
         <div className="space-y-3 pt-3 border-t border-slate-100">
           <div className="flex items-center space-x-2 text-slate-700">
             <HardDrive className="h-4 w-4 text-brand-700" />

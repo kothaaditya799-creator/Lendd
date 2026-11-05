@@ -497,7 +497,7 @@ export function generateWhatsAppEodText(summary: EodSummary, isTe: boolean): str
 
   if (isTe) {
     return (
-      `🌅 *లేండ్‌ట్రాక్ • నేటి ముగింపు లెక్క (EOD Tally)*\n` +
+      `📋 *లేండ్‌ట్రాక్ • నేటి ముగింపు లెక్క (EOD Tally)*\n` +
       `📅 తేదీ: ${formattedDate}\n` +
       `------------------------------------\n` +
       `💰 *చేతిలో నికర నగదు: ${sign}${formatINR(summary.netCashFlow)}*\n\n` +
@@ -517,7 +517,7 @@ export function generateWhatsAppEodText(summary: EodSummary, isTe: boolean): str
   }
 
   return (
-    `🌅 *LendTrack • End-of-Day Cash Tally*\n` +
+    `📋 *LendTrack • End-of-Day Cash Tally*\n` +
     `📅 Date: ${formattedDate}\n` +
     `------------------------------------\n` +
     `💰 *Net Cash in Hand: ${sign}${formatINR(summary.netCashFlow)}*\n\n` +

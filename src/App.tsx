@@ -8,6 +8,7 @@ import { InsightsPage } from './pages/InsightsPage';
 import { SettingsModal } from './components/layout/SettingsModal';
 import { PinLockScreen } from './components/security/PinLockScreen';
 import { useAutoLock } from './hooks/useAutoLock';
+import { useSyncStatus } from './hooks/useSyncStatus';
 import { getSecurityConfig } from './utils/security';
 import { Shield } from 'lucide-react';
 
@@ -20,6 +21,9 @@ export const App: React.FC = () => {
 
   // Phase 6: Auto-Lock, Inactivity and Background Grace Protection
   const { isLocked, lock, unlock, isPrivacyCurtainVisible } = useAutoLock();
+
+  // Phase 7: Cloud Sync Engine & Real-Time Connectivity
+  const { isOnline, isSyncing, pendingCount, lastSyncTimestamp, syncNow } = useSyncStatus();
 
   const handleLock = () => {
     const cfg = getSecurityConfig();
@@ -82,7 +86,10 @@ export const App: React.FC = () => {
         onToggleLanguage={handleToggleLanguage}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onLock={handleLock}
-        isOnline={true}
+        isOnline={isOnline}
+        isSyncing={isSyncing}
+        pendingCount={pendingCount}
+        onTriggerSync={syncNow}
       >
         {renderCurrentView()}
       </AppShell>
@@ -95,6 +102,11 @@ export const App: React.FC = () => {
         onToggleLanguage={handleToggleLanguage}
         onChangePin={() => setIsChangingPin(true)}
         onLockNow={lock}
+        isOnline={isOnline}
+        isSyncing={isSyncing}
+        pendingCount={pendingCount}
+        lastSyncTimestamp={lastSyncTimestamp}
+        onTriggerSync={syncNow}
       />
 
       {/* Full-Screen PIN Lock Gate (App Launch & Inactivity Gate) */}
