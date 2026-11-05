@@ -16,6 +16,7 @@ import {
   ChevronDown,
   ChevronUp,
   RefreshCw,
+  RotateCcw,
 } from 'lucide-react';
 import { loanRepo } from '../db/repositories/loanRepo';
 import { borrowerRepo } from '../db/repositories/borrowerRepo';
@@ -139,9 +140,22 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
     loadData();
   }, [selectedEodDate]);
 
-  // EOD Date Navigation Handlers
+  // EOD Date Navigation Handlers (Strictly Today & Past Days - No Future EOD)
+  const isSelectedDateToday = selectedEodDate === todayStr;
+
   const handlePrevDay = () => setSelectedEodDate((prev) => addDays(prev, -1));
-  const handleNextDay = () => setSelectedEodDate((prev) => addDays(prev, 1));
+  const handleNextDay = () => {
+    setSelectedEodDate((prev) => {
+      const next = addDays(prev, 1);
+      return next > todayStr ? todayStr : next;
+    });
+  };
+  const handleToday = () => setSelectedEodDate(todayStr);
+  const handleDateChange = (val: string) => {
+    if (!val) return;
+    // Strictly cap at today - future EOD cash tally does not exist
+    setSelectedEodDate(val > todayStr ? todayStr : val);
+  };
 
   const toggleBucket = (bucket: 'healthy' | 'minorDelay' | 'warning' | 'critical') => {
     setExpandedBucket((prev) => (prev === bucket ? null : bucket));
@@ -225,50 +239,104 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
         <div className="space-y-4 animate-fade-in">
           <div className="bg-white rounded-3xl p-5 shadow-sm border-2 border-slate-200 space-y-4">
             {/* EOD Header & Date Selector */}
-            <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-lg">🌅</span>
                   <h3 className="text-base font-extrabold text-slate-900 leading-tight">
-                    {isTe ? 'నేటి ముగింపు లెక్క (EOD Tally)' : 'End-of-Day Cash Tally'}
+                    {isSelectedDateToday
+                      ? isTe
+                        ? 'నేటి ముగింపు లెక్క (Today’s EOD)'
+                        : 'Today’s EOD Cash Tally'
+                      : isTe
+                      ? 'గత ముగింపు లెక్క (Historical EOD)'
+                      : 'Historical EOD Cash Tally'}
                   </h3>
                 </div>
-                <p className="text-xs font-semibold text-slate-500 mt-0.5">
-                  {formatDisplayDate(selectedEodDate, isTe)}
-                </p>
+                <div className="flex items-center gap-2 mt-1">
+                  <p className="text-xs font-semibold text-slate-600">
+                    {formatDisplayDate(selectedEodDate, isTe)}
+                  </p>
+                  {isSelectedDateToday ? (
+                    <span className="bg-teal-100 text-teal-900 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider">
+                      {isTe ? 'ఈరోజు' : 'Today'}
+                    </span>
+                  ) : (
+                    <span className="bg-amber-100 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider">
+                      {isTe ? 'గత రికార్డు' : 'Past Record'}
+                    </span>
+                  )}
+                </div>
               </div>
 
-              {/* Date Picker Controls */}
-              <div className="flex items-center gap-1.5">
+              {/* Date Controls (Past & Today only - strictly capped at Today) */}
+              <div className="flex items-center gap-1.5 self-start sm:self-auto flex-wrap">
+                {/* Previous Day (<) */}
                 <button
                   type="button"
                   onClick={handlePrevDay}
-                  className="min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 flex items-center justify-center text-slate-700"
-                  title="Previous Day"
+                  className="min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 flex items-center justify-center text-slate-700 transition-colors"
+                  title={isTe ? 'మునుపటి రోజు' : 'Previous Day'}
+                  aria-label="Previous Day"
                 >
                   <ChevronLeft size={18} />
                 </button>
+
+                {/* 1-Tap Return to Today Button (Appears only when viewing past dates) */}
+                {!isSelectedDateToday && (
+                  <button
+                    type="button"
+                    onClick={handleToday}
+                    className="min-h-[44px] px-3.5 rounded-xl bg-teal-700 hover:bg-teal-800 active:scale-95 text-white text-xs font-black flex items-center gap-1.5 shadow-sm transition-all"
+                    title={isTe ? 'ఈరోజుకి తిరిగి వెళ్లండి' : 'Return to Today'}
+                  >
+                    <RotateCcw size={14} className="stroke-[2.5]" />
+                    <span>{isTe ? 'ఈరోజు' : 'Today'}</span>
+                  </button>
+                )}
+
+                {/* Calendar Picker Button */}
                 <button
                   type="button"
                   onClick={() => datePickerRef.current?.showPicker()}
-                  className="px-3 min-h-[44px] rounded-xl bg-teal-50 text-teal-800 border border-teal-200 text-xs font-bold flex items-center gap-1.5 hover:bg-teal-100 active:scale-95"
+                  className="px-3 min-h-[44px] rounded-xl bg-teal-50 text-teal-800 border border-teal-200 text-xs font-bold flex items-center gap-1.5 hover:bg-teal-100 active:scale-95 transition-all"
+                  title={isTe ? 'తేదీని ఎంచుకోండి' : 'Select Date'}
                 >
                   <Calendar size={14} />
                   <span>{isTe ? 'తేదీ' : 'Date'}</span>
                 </button>
+
+                {/* Next Day (>) - Strictly Disabled on Today to prevent future reconciliation */}
                 <button
                   type="button"
                   onClick={handleNextDay}
-                  className="min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 flex items-center justify-center text-slate-700"
-                  title="Next Day"
+                  disabled={isSelectedDateToday}
+                  className={`min-w-[44px] min-h-[44px] rounded-xl flex items-center justify-center transition-all ${
+                    isSelectedDateToday
+                      ? 'bg-slate-100 text-slate-300 cursor-not-allowed opacity-40'
+                      : 'bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700'
+                  }`}
+                  title={
+                    isSelectedDateToday
+                      ? isTe
+                        ? 'భవిష్యత్తు ముగింపు లెక్క ఉండదు (Future EOD not available)'
+                        : 'Future EOD not available'
+                      : isTe
+                      ? 'తరువాతి రోజు'
+                      : 'Next Day'
+                  }
+                  aria-label="Next Day"
                 >
                   <ChevronRight size={18} />
                 </button>
+
+                {/* Hidden Date Input strictly capped at todayStr */}
                 <input
                   ref={datePickerRef}
                   type="date"
+                  max={todayStr}
                   value={selectedEodDate}
-                  onChange={(e) => e.target.value && setSelectedEodDate(e.target.value)}
+                  onChange={(e) => handleDateChange(e.target.value)}
                   className="sr-only"
                 />
               </div>
@@ -284,7 +352,13 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
             >
               <div>
                 <span className="text-[11px] font-extrabold uppercase tracking-wider opacity-80 block">
-                  {isTe ? 'చేతిలో మిగిలిన నికర నగదు (Net Cash in Hand)' : 'Net Cash Position Today'}
+                  {isSelectedDateToday
+                    ? isTe
+                      ? 'చేతిలో మిగిలిన నికర నగదు (Net Cash in Hand)'
+                      : 'Net Cash Position Today'
+                    : isTe
+                    ? 'ఆనాటి నికర నగదు లెక్క (Historical Net Cash)'
+                    : 'Net Cash Position (Historical)'}
                 </span>
                 <p className="text-3xl font-black mt-0.5 tracking-tight">
                   {eodSummary.netCashFlow >= 0 ? '+' : ''}
@@ -293,11 +367,19 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
                 <span className="text-xs font-semibold opacity-90 mt-0.5 block">
                   {eodSummary.netCashFlow >= 0
                     ? isTe
-                      ? '✓ నేటి వసూళ్లు కొత్త రుణాల కంటే ఎక్కువ'
-                      : '✓ Cash surplus after today’s disbursements'
+                      ? isSelectedDateToday
+                        ? '✓ నేటి వసూళ్లు కొత్త రుణాల కంటే ఎక్కువ'
+                        : '✓ ఆనాటి వసూళ్లు కొత్త రుణాల కంటే ఎక్కువ'
+                      : isSelectedDateToday
+                      ? '✓ Cash surplus after today’s disbursements'
+                      : '✓ Cash surplus after disbursements on that date'
                     : isTe
+                    ? isSelectedDateToday
                       ? '⚠️ నేటి కొత్త రుణాలు వసూళ్ల కంటే ఎక్కువ'
-                      : '⚠️ Disbursements exceeded today’s collections'}
+                      : '⚠️ ఆనాటి కొత్త రుణాలు వసూళ్ల కంటే ఎక్కువ'
+                    : isSelectedDateToday
+                    ? '⚠️ Disbursements exceeded today’s collections'
+                    : '⚠️ Disbursements exceeded collections on that date'}
                 </span>
               </div>
 
@@ -388,7 +470,15 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
               className="w-full min-h-[52px] rounded-2xl bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white font-extrabold text-sm shadow-md transition-all flex items-center justify-center gap-2"
             >
               <MessageCircle size={20} />
-              <span>{isTe ? 'WhatsApp లో ముగింపు లెక్క పంపండి' : 'Share EOD Summary to WhatsApp'}</span>
+              <span>
+                {isSelectedDateToday
+                  ? isTe
+                    ? 'WhatsApp లో నేటి ముగింపు లెక్క పంపండి'
+                    : 'Share Today’s EOD Summary to WhatsApp'
+                  : isTe
+                  ? 'WhatsApp లో ఆనాటి ముగింపు లెక్క పంపండి'
+                  : 'Share Historical EOD Summary to WhatsApp'}
+              </span>
             </button>
           </div>
         </div>
