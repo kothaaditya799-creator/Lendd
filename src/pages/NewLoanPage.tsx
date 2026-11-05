@@ -12,6 +12,7 @@ import { Borrower, PaymentSchedule } from '../types/domain';
 import { generateDFSchedule, generateSPSchedule, formatDateToISO } from '../utils/loanCalculator';
 import { formatShortDate } from '../utils/dateUtils';
 import { generateUUID } from '../utils/uuid';
+import { getOrCreateLenderId } from '../utils/lenderId';
 import { ScheduleInspectorModal } from '../components/loans/ScheduleInspectorModal';
 import { BorrowerPickerDropdown } from '../components/loans/BorrowerPickerDropdown';
 import { Toast } from '../components/common/Toast';
@@ -257,7 +258,7 @@ export const NewLoanPage: React.FC<NewLoanPageProps> = ({
         // 2. Save Loan Record to Dexie
         await loanRepo.createLoan({
           id: loanId,
-          lenderId: 'local-lender',
+          lenderId: getOrCreateLenderId(),
           borrowerId: selectedBorrowerId,
           loanType: 'DF',
           principalAmount: principal,
@@ -292,7 +293,7 @@ export const NewLoanPage: React.FC<NewLoanPageProps> = ({
         // 2. Save Loan Record to Dexie
         await loanRepo.createLoan({
           id: loanId,
-          lenderId: 'local-lender',
+          lenderId: getOrCreateLenderId(),
           borrowerId: selectedBorrowerId,
           loanType: 'SP',
           principalAmount: principal,

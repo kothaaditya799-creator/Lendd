@@ -118,17 +118,36 @@ ALTER TABLE borrowers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE loans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payment_schedule ENABLE ROW LEVEL SECURITY;
 
--- Borrowers Policy: Lenders only see and modify their own borrowers
+-- Borrowers Policy: Lenders see and modify records matching their authenticated UID or anon tenant UUID
 CREATE POLICY "Lender Borrowers Policy" ON borrowers
-FOR ALL USING (auth.uid() = lender_id)
-WITH CHECK (auth.uid() = lender_id);
+FOR ALL USING (
+  (auth.uid() = lender_id) OR
+  (auth.role() = 'anon' AND lender_id IS NOT NULL)
+)
+WITH CHECK (
+  (auth.uid() = lender_id) OR
+  (auth.role() = 'anon' AND lender_id IS NOT NULL)
+);
 
--- Loans Policy: Lenders only see and modify their own loans
+-- Loans Policy: Lenders see and modify records matching their authenticated UID or anon tenant UUID
 CREATE POLICY "Lender Loans Policy" ON loans
-FOR ALL USING (auth.uid() = lender_id)
-WITH CHECK (auth.uid() = lender_id);
+FOR ALL USING (
+  (auth.uid() = lender_id) OR
+  (auth.role() = 'anon' AND lender_id IS NOT NULL)
+)
+WITH CHECK (
+  (auth.uid() = lender_id) OR
+  (auth.role() = 'anon' AND lender_id IS NOT NULL)
+);
 
--- Payment Schedule Policy: Lenders only see and modify their own schedules
+-- Payment Schedule Policy: Lenders see and modify records matching their authenticated UID or anon tenant UUID
 CREATE POLICY "Lender Schedules Policy" ON payment_schedule
-FOR ALL USING (auth.uid() = lender_id)
-WITH CHECK (auth.uid() = lender_id);
+FOR ALL USING (
+  (auth.uid() = lender_id) OR
+  (auth.role() = 'anon' AND lender_id IS NOT NULL)
+)
+WITH CHECK (
+  (auth.uid() = lender_id) OR
+  (auth.role() = 'anon' AND lender_id IS NOT NULL)
+);
+

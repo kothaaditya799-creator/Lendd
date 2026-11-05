@@ -225,8 +225,15 @@ export async function runPhase7Verification(): Promise<{
   const queueCount = await getPendingSyncCount();
   assert('Sync Queue: Enqueued exactly 3 items', queueCount === 3);
 
-  // Drain in unconfigured / local mode
-  const drainResult = await drainSyncQueue();
+  // 1. Drain when unconfigured preserves items in queue
+  const unconfiguredResult = await drainSyncQueue();
+  assert(
+    'Sync Queue: Preserves queued items when cloud unconfigured',
+    unconfiguredResult.remainingCount === 3 && unconfiguredResult.processedCount === 0
+  );
+
+  // 2. Explicit drain processes queue
+  const drainResult = await drainSyncQueue({ forceDrainWithoutCloud: true });
   assert(
     'Queue Drain: Worker executes successfully',
     drainResult.success === true

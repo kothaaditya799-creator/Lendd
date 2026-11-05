@@ -101,3 +101,4 @@ export function subscribePwaInstall(listener: (canInstall: boolean) => void): ()
     installListeners.delete(listener);
   };
 }
+

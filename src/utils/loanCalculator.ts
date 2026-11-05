@@ -1,5 +1,6 @@
 import type { PaymentSchedule, Loan } from '../types/domain';
 import { generateUUID } from './uuid.ts';
+import { DEFAULT_FALLBACK_UUID } from './lenderId.ts';
 import {
   parseISODate,
   formatDateToISO,
@@ -65,7 +66,7 @@ export function generateDFSchedule(params: GenerateDFScheduleParams): GenerateDF
   const {
     loanId,
     borrowerId,
-    lenderId = 'local-lender',
+    lenderId = DEFAULT_FALLBACK_UUID,
     totalRepayment,
     installments,
     frequency,
@@ -188,7 +189,7 @@ export function generateSPSchedule(params: GenerateSPScheduleParams): GenerateSP
   const {
     loanId,
     borrowerId,
-    lenderId = 'local-lender',
+    lenderId = DEFAULT_FALLBACK_UUID,
     principal,
     monthlyInterestRate,
     frequency,

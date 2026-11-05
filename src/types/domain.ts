@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DEFAULT_FALLBACK_UUID } from '../utils/lenderId';
 
 /* =========================================================================
    1. STRICT INPUT VALIDATION RULES (SWISS CHEESE LAYER 2)
@@ -48,7 +49,7 @@ export const SecurityPinSchema = z
 // --- BORROWER ---
 export const BorrowerSchema = z.object({
   id: z.string().uuid(),
-  lenderId: z.string().default('local-lender'),
+  lenderId: z.string().default(DEFAULT_FALLBACK_UUID),
   name: z
     .string()
     .trim()
@@ -82,7 +83,7 @@ export type LoanStatus = z.infer<typeof LoanStatusEnum>;
 
 export const LoanSchema = z.object({
   id: z.string().uuid(),
-  lenderId: z.string().default('local-lender'),
+  lenderId: z.string().default(DEFAULT_FALLBACK_UUID),
   borrowerId: z.string().uuid(),
   loanType: LoanTypeEnum,
   principalAmount: CurrencyAmountSchema,
@@ -124,7 +125,7 @@ export type PaymentType = z.infer<typeof PaymentTypeEnum>;
 export const PaymentScheduleSchema = z.object({
   id: z.string().uuid(),
   loanId: z.string().uuid(),
-  lenderId: z.string().default('local-lender'),
+  lenderId: z.string().default(DEFAULT_FALLBACK_UUID),
   borrowerId: z.string().uuid(),
   dueDate: ISODateStringSchema,
   amountDue: z.number().int().positive(),

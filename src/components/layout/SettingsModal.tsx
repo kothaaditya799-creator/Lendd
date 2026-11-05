@@ -28,6 +28,7 @@ import {
   getSupabaseConfig,
   saveSupabaseConfig,
 } from '../../db/supabaseClient';
+import { pushAllLocalDataToCloud } from '../../db/syncEngine';
 import {
   canPromptPwaInstall,
   promptPwaInstall,
@@ -83,6 +84,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [cloudUrl, setCloudUrl] = useState('');
   const [cloudAnonKey, setCloudAnonKey] = useState('');
   const [cloudSaved, setCloudSaved] = useState(false);
+  const [isPushingAll, setIsPushingAll] = useState(false);
+  const [pushResult, setPushResult] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -119,6 +122,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setCloudSaved(true);
       setTimeout(() => setCloudSaved(false), 2000);
       if (onTriggerSync) onTriggerSync();
+    }
+  };
+
+  const handlePushAll = async () => {
+    setIsPushingAll(true);
+    setPushResult(null);
+    try {
+      const res = await pushAllLocalDataToCloud();
+      if (res.success) {
+        setPushResult(
+          isTe
+            ? `✓ మొత్తం డేటా క్లౌడ్‌లో భద్రపరచబడింది (${res.borrowersCount} ఖాతాదారులు, ${res.loansCount} రుణాలు)`
+            : `✓ Pushed ${res.borrowersCount} borrowers, ${res.loansCount} loans, ${res.schedulesCount} milestones!`
+        );
+      } else {
+        setPushResult(res.error || 'Failed to push records');
+      }
+    } finally {
+      setIsPushingAll(false);
     }
   };
 
@@ -503,6 +525,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       ? isTe ? '✓ క్లౌడ్ కీలు భద్రపరచబడ్డాయి!' : '✓ Cloud Keys Saved!'
                       : isTe ? 'క్లౌడ్ కనెక్షన్‌ను భద్రపరచు' : 'Save Cloud Connection'}
                   </button>
+
+                  {/* Initial Full Push to Cloud */}
+                  <div className="pt-2 border-t border-slate-200/80">
+                    <button
+                      type="button"
+                      disabled={isPushingAll || !cloudUrl.trim() || !cloudAnonKey.trim()}
+                      onClick={handlePushAll}
+                      className="w-full min-h-[42px] rounded-lg bg-teal-50 border border-teal-300 text-teal-800 hover:bg-teal-100 disabled:opacity-50 text-xs font-bold active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <Cloud size={14} className={isPushingAll ? 'animate-bounce' : ''} />
+                      <span>
+                        {isPushingAll
+                          ? isTe ? 'అప్‌లోడ్ అవుతోంది...' : 'Pushing all records...'
+                          : isTe ? 'మొత్తం స్థానిక డేటాను క్లౌడ్‌కి అప్‌లోడ్ చేయి' : 'Push All Local Records to Cloud'}
+                      </span>
+                    </button>
+                    {pushResult && (
+                      <p className="mt-1 text-[11px] font-semibold text-teal-700 text-center">
+                        {pushResult}
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

@@ -11,6 +11,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { PaymentSchedule, Loan } from '../../types/domain';
+import { DEFAULT_FALLBACK_UUID } from '../../utils/lenderId';
 import { formatINR } from '../../utils/currency';
 import { formatDisplayDate, isSunday } from '../../utils/dateUtils';
 import { calculateEarlyPayoff } from '../../utils/loanCalculator';
@@ -75,9 +76,9 @@ export const ScheduleInspectorModal: React.FC<ScheduleInspectorModalProps> = ({
 
   // Early payoff figures if existing loan or simulated
   const simulatedLoan: Loan = existingLoan || {
-    id: 'simulated-loan',
-    lenderId: 'local-lender',
-    borrowerId: 'borrower-preview',
+    id: '00000000-0000-4000-8000-000000000099',
+    lenderId: DEFAULT_FALLBACK_UUID,
+    borrowerId: '00000000-0000-4000-8000-000000000088',
     loanType,
     principalAmount,
     totalRepaymentAmount: totalAmount,

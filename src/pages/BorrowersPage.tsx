@@ -20,6 +20,7 @@ import { loanRepo } from '../db/repositories/loanRepo';
 import { paymentRepo } from '../db/repositories/paymentRepo';
 import { Borrower, Loan, PaymentSchedule } from '../types/domain';
 import { generateUUID } from '../utils/uuid';
+import { getOrCreateLenderId } from '../utils/lenderId';
 import { formatShortDate } from '../utils/dateUtils';
 import { ScheduleInspectorModal } from '../components/loans/ScheduleInspectorModal';
 import { Toast } from '../components/common/Toast';
@@ -430,7 +431,7 @@ export const BorrowersPage: React.FC<BorrowersPageProps> = ({
     try {
       await borrowerRepo.addBorrower({
         id: generateUUID(),
-        lenderId: 'local-lender',
+        lenderId: getOrCreateLenderId(),
         name: trimmedName,
         phone: cleanPhone,
         guarantorName: guarantorName.trim() || undefined,

@@ -187,7 +187,9 @@ export function subscribeSyncState(listener: SyncStateListener): () => void {
 /**
  * CORE WORKER: Drain the Dexie syncQueue in FIFO Order.
  */
-export async function drainSyncQueue(): Promise<{
+export async function drainSyncQueue(options?: {
+  forceDrainWithoutCloud?: boolean;
+}): Promise<{
   processedCount: number;
   remainingCount: number;
   success: boolean;
@@ -239,6 +241,13 @@ export async function drainSyncQueue(): Promise<{
 
     const hasCloudCredentials = isSupabaseConfigured();
 
+    // If Supabase is unconfigured and forceDrain is not requested, preserve the queue
+    if (!hasCloudCredentials && !options?.forceDrainWithoutCloud) {
+      isCurrentlySyncing = false;
+      await notifyListeners();
+      return { processedCount: 0, remainingCount: queueItems.length, success: true };
+    }
+
     for (const item of queueItems) {
       if (!item.id) continue;
 
@@ -259,7 +268,7 @@ export async function drainSyncQueue(): Promise<{
         }
       }
 
-      // Mutation successfully applied to cloud (or cleared in local-first demo mode)
+      // Mutation successfully applied to cloud (or cleared during local test worker)
       try {
         if (typeof indexedDB !== 'undefined') {
           await db.syncQueue.delete(item.id);
@@ -361,4 +370,73 @@ export function initSyncEngine(): () => void {
       backoffTimer = null;
     }
   };
+}
+
+/**
+ * Full Cloud Push:
+ * Pushes all local borrowers, loans, and schedules to Supabase.
+ * Guarantees that an offline ledger can be completely synced when cloud credentials are added.
+ */
+export async function pushAllLocalDataToCloud(): Promise<{
+  borrowersCount: number;
+  loansCount: number;
+  schedulesCount: number;
+  success: boolean;
+  error?: string;
+}> {
+  if (!isSupabaseConfigured()) {
+    return {
+      borrowersCount: 0,
+      loansCount: 0,
+      schedulesCount: 0,
+      success: false,
+      error: 'Supabase credentials not configured',
+    };
+  }
+
+  isCurrentlySyncing = true;
+  await notifyListeners();
+
+  try {
+    const allBorrowers = await db.borrowers.toArray();
+    for (const borrower of allBorrowers) {
+      const res = await upsertCloudRecord('borrowers', borrower);
+      if (!res.ok) throw new Error(res.error || 'Failed to push borrower');
+    }
+
+    const allLoans = await db.loans.toArray();
+    for (const loan of allLoans) {
+      const res = await upsertCloudRecord('loans', loan);
+      if (!res.ok) throw new Error(res.error || 'Failed to push loan');
+    }
+
+    const allSchedules = await db.schedules.toArray();
+    for (const sched of allSchedules) {
+      const res = await upsertCloudRecord('payment_schedule', sched);
+      if (!res.ok) throw new Error(res.error || 'Failed to push schedule');
+    }
+
+    await clearSyncQueue();
+    setLastSyncTimestamp(Date.now());
+    isCurrentlySyncing = false;
+    await notifyListeners();
+
+    return {
+      borrowersCount: allBorrowers.length,
+      loansCount: allLoans.length,
+      schedulesCount: allSchedules.length,
+      success: true,
+    };
+  } catch (err: unknown) {
+    isCurrentlySyncing = false;
+    await notifyListeners();
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      borrowersCount: 0,
+      loansCount: 0,
+      schedulesCount: 0,
+      success: false,
+      error: message,
+    };
+  }
 }
