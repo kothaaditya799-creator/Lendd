@@ -17,6 +17,7 @@ import {
   ChevronUp,
   RefreshCw,
   RotateCcw,
+  Receipt,
 } from 'lucide-react';
 import { loanRepo } from '../db/repositories/loanRepo';
 import { borrowerRepo } from '../db/repositories/borrowerRepo';
@@ -44,11 +45,11 @@ interface InsightsPageProps {
 
 export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
   const isTe = language === 'te';
-  const todayStr = formatDateToISO(new Date());
+  const [todayStr, setTodayStr] = useState<string>(() => formatDateToISO(new Date()));
 
   // 2-Segment Toggle: 'tally' (Daily Cash Tally) vs 'health' (Portfolio Health & Risk)
   const [activeSegment, setActiveSegment] = useState<'tally' | 'health'>('tally');
-  const [selectedEodDate, setSelectedEodDate] = useState<string>(todayStr);
+  const [selectedEodDate, setSelectedEodDate] = useState<string>(() => formatDateToISO(new Date()));
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [expandedBucket, setExpandedBucket] = useState<'healthy' | 'minorDelay' | 'warning' | 'critical' | null>(null);
 
@@ -140,6 +141,30 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
     loadData();
   }, [selectedEodDate]);
 
+  // Midnight rollover & window focus sync (auto-advancing today if date changes)
+  useEffect(() => {
+    const handleSyncToday = () => {
+      const realToday = formatDateToISO(new Date());
+      if (realToday !== todayStr) {
+        setTodayStr(realToday);
+        setSelectedEodDate((prev) => (prev === todayStr ? realToday : prev));
+      }
+    };
+
+    window.addEventListener('focus', handleSyncToday);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        handleSyncToday();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', handleSyncToday);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [todayStr]);
+
   // EOD Date Navigation Handlers (Strictly Today & Past Days - No Future EOD)
   const isSelectedDateToday = selectedEodDate === todayStr;
 
@@ -214,7 +239,7 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
           }`}
         >
-          <span className="text-base">🌅</span>
+          <Receipt size={16} />
           <span>{isTe ? 'నేటి ముగింపు లెక్క' : 'Daily Cash Tally'}</span>
         </button>
 
@@ -227,7 +252,7 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
           }`}
         >
-          <span className="text-base">📊</span>
+          <BarChart3 size={16} />
           <span>{isTe ? 'వ్యాపార ఆరోగ్యం & రిస్క్' : 'Portfolio Health & Risk'}</span>
         </button>
       </div>
@@ -238,11 +263,11 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
       {activeSegment === 'tally' && (
         <div className="space-y-4 animate-fade-in">
           <div className="bg-white rounded-3xl p-5 shadow-sm border-2 border-slate-200 space-y-4">
-            {/* EOD Header & Date Selector */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">🌅</span>
+            {/* EOD Header & Clean Date Selector (Fintech Minimalist) */}
+            <div className="space-y-3 border-b border-slate-100 pb-3">
+              {/* Header Title & Status Badge */}
+              <div className="flex items-center justify-between">
+                <div>
                   <h3 className="text-base font-extrabold text-slate-900 leading-tight">
                     {isSelectedDateToday
                       ? isTe
@@ -252,69 +277,76 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
                       ? 'గత ముగింపు లెక్క (Historical EOD)'
                       : 'Historical EOD Cash Tally'}
                   </h3>
-                </div>
-                <div className="flex items-center gap-2 mt-1">
-                  <p className="text-xs font-semibold text-slate-600">
-                    {formatDisplayDate(selectedEodDate, isTe)}
+                  <p className="text-xs font-semibold text-slate-500 mt-0.5">
+                    {isSelectedDateToday
+                      ? isTe
+                        ? 'నేటి నగదు లెక్క & నికర నిల్వ'
+                        : 'Reconciled cash in hand & net flow'
+                      : isTe
+                      ? 'గత తేదీ ఆడిట్ రికార్డు'
+                      : 'Audit record for selected past date'}
                   </p>
-                  {isSelectedDateToday ? (
-                    <span className="bg-teal-100 text-teal-900 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider">
-                      {isTe ? 'ఈరోజు' : 'Today'}
-                    </span>
-                  ) : (
-                    <span className="bg-amber-100 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider">
-                      {isTe ? 'గత రికార్డు' : 'Past Record'}
-                    </span>
-                  )}
                 </div>
+
+                {isSelectedDateToday ? (
+                  <span className="bg-teal-100 text-teal-900 border border-teal-200 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">
+                    {isTe ? 'ఈరోజు' : 'Today'}
+                  </span>
+                ) : (
+                  <span className="bg-amber-100 text-amber-900 border border-amber-200 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">
+                    {isTe ? 'గత రికార్డు' : 'Past Record'}
+                  </span>
+                )}
               </div>
 
-              {/* Date Controls (Past & Today only - strictly capped at Today) */}
-              <div className="flex items-center gap-1.5 self-start sm:self-auto flex-wrap">
+              {/* Unified Date Bar (Single-Row, Never Wraps into 2x2) */}
+              <div className="flex items-center justify-between bg-slate-50 p-1.5 rounded-2xl border border-slate-200 gap-1.5">
                 {/* Previous Day (<) */}
                 <button
                   type="button"
                   onClick={handlePrevDay}
-                  className="min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 flex items-center justify-center text-slate-700 transition-colors"
+                  className="min-w-[44px] min-h-[44px] rounded-xl bg-white hover:bg-slate-100 border border-slate-200 active:scale-95 flex items-center justify-center text-slate-700 shadow-xs transition-all"
                   title={isTe ? 'మునుపటి రోజు' : 'Previous Day'}
                   aria-label="Previous Day"
                 >
-                  <ChevronLeft size={18} />
+                  <ChevronLeft size={20} />
                 </button>
 
-                {/* 1-Tap Return to Today Button (Appears only when viewing past dates) */}
+                {/* Clickable Date Display (opens native calendar) */}
+                <button
+                  type="button"
+                  onClick={() => datePickerRef.current?.showPicker()}
+                  className="flex-1 min-h-[44px] px-2 flex items-center justify-center gap-1.5 hover:bg-white rounded-xl transition-all cursor-pointer group"
+                  title={isTe ? 'క్యాలెండర్ నుండి తేదీని ఎంచుకోండి' : 'Choose date from calendar'}
+                >
+                  <Calendar size={16} className="text-teal-700 group-hover:scale-110 transition-transform" />
+                  <span className="text-xs sm:text-sm font-black text-slate-900">
+                    {formatDisplayDate(selectedEodDate, isTe)}
+                  </span>
+                </button>
+
+                {/* Return to Today Button (Visible only on past dates) */}
                 {!isSelectedDateToday && (
                   <button
                     type="button"
                     onClick={handleToday}
-                    className="min-h-[44px] px-3.5 rounded-xl bg-teal-700 hover:bg-teal-800 active:scale-95 text-white text-xs font-black flex items-center gap-1.5 shadow-sm transition-all"
-                    title={isTe ? 'ఈరోజుకి తిరిగి వెళ్లండి' : 'Return to Today'}
+                    className="min-h-[44px] px-3.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-black flex items-center gap-1.5 active:scale-95 shadow-sm transition-all"
+                    title={isTe ? 'ఈరోజుకి తిరిగి వెళ్లండి' : 'Jump to Today'}
                   >
                     <RotateCcw size={14} className="stroke-[2.5]" />
                     <span>{isTe ? 'ఈరోజు' : 'Today'}</span>
                   </button>
                 )}
 
-                {/* Calendar Picker Button */}
-                <button
-                  type="button"
-                  onClick={() => datePickerRef.current?.showPicker()}
-                  className="px-3 min-h-[44px] rounded-xl bg-teal-50 text-teal-800 border border-teal-200 text-xs font-bold flex items-center gap-1.5 hover:bg-teal-100 active:scale-95 transition-all"
-                  title={isTe ? 'తేదీని ఎంచుకోండి' : 'Select Date'}
-                >
-                  <Calendar size={14} />
-                  <span>{isTe ? 'తేదీ' : 'Date'}</span>
-                </button>
-
-                {/* Next Day (>) - Strictly Disabled on Today to prevent future reconciliation */}
+                {/* Next Day (>) - Strictly Disabled on Today */}
                 <button
                   type="button"
                   onClick={handleNextDay}
                   disabled={isSelectedDateToday}
                   className={`min-w-[44px] min-h-[44px] rounded-xl flex items-center justify-center transition-all ${
                     isSelectedDateToday
-                      ? 'bg-slate-100 text-slate-300 cursor-not-allowed opacity-40'
-                      : 'bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700'
+                      ? 'bg-transparent text-slate-300 cursor-not-allowed opacity-30'
+                      : 'bg-white hover:bg-slate-100 border border-slate-200 active:scale-95 text-slate-700 shadow-xs'
                   }`}
                   title={
                     isSelectedDateToday
@@ -327,7 +359,7 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ language }) => {
                   }
                   aria-label="Next Day"
                 >
-                  <ChevronRight size={18} />
+                  <ChevronRight size={20} />
                 </button>
 
                 {/* Hidden Date Input strictly capped at todayStr */}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Calendar,
   ChevronLeft,
@@ -13,6 +13,8 @@ import {
   Check,
   TrendingUp,
   Pencil,
+  Info,
+  Loader2,
 } from 'lucide-react';
 import { paymentRepo } from '../db/repositories/paymentRepo';
 import { loanRepo } from '../db/repositories/loanRepo';
@@ -37,9 +39,10 @@ interface CollectionItem {
 export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) => {
   const isTe = language === 'te';
 
-  // Active Date Filter (defaults to today)
-  const todayIso = useMemo(() => formatDateToISO(new Date()), []);
-  const [selectedDate, setSelectedDate] = useState<string>(todayIso);
+  // Active Date Filter (defaults to real current day with midnight rollover)
+  const [todayIso, setTodayIso] = useState<string>(() => formatDateToISO(new Date()));
+  const [selectedDate, setSelectedDate] = useState<string>(() => formatDateToISO(new Date()));
+  const datePickerRef = useRef<HTMLInputElement>(null);
 
   // Data State
   const [items, setItems] = useState<CollectionItem[]>([]);
@@ -50,6 +53,12 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
   // Partial Payment Modal State
   const [modalItem, setModalItem] = useState<CollectionItem | null>(null);
 
+  // Past Date Safety Confirmation Modal State
+  const [pastDateConfirm, setPastDateConfirm] = useState<{
+    type: 'full' | 'missed';
+    item: CollectionItem;
+  } | null>(null);
+
   // Tap Debounce & Processing Lock (Swiss Cheese Layer 3)
   const [processingId, setProcessingId] = useState<string | null>(null);
 
@@ -58,6 +67,7 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
   const [lastAction, setLastAction] = useState<{
     scheduleId: string;
     previousAmount: number;
+    previousStatus: 'pending' | 'paid' | 'partial' | 'missed';
     notes?: string;
   } | null>(null);
 
@@ -112,20 +122,50 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
     loadCollections();
   }, [loadCollections]);
 
+  // Midnight rollover & window focus sync (auto-advancing today if date changes)
+  useEffect(() => {
+    const handleSyncToday = () => {
+      const realToday = formatDateToISO(new Date());
+      if (realToday !== todayIso) {
+        setTodayIso(realToday);
+        setSelectedDate((prev) => (prev === todayIso ? realToday : prev));
+      }
+    };
+
+    window.addEventListener('focus', handleSyncToday);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        handleSyncToday();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', handleSyncToday);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [todayIso]);
+
   // Date Navigation Handlers
   const handlePrevDay = () => setSelectedDate((prev) => addDays(prev, -1));
   const handleNextDay = () => setSelectedDate((prev) => addDays(prev, 1));
   const handleToday = () => setSelectedDate(todayIso);
 
-  // 1-Tap Undo Action Handler
+  // 1-Tap Undo Action Handler (Full-Fidelity State Restoration)
   const handleUndo = async () => {
     if (!lastAction) return;
     try {
-      await paymentRepo.recordPayment({
-        scheduleId: lastAction.scheduleId,
-        collectedAmount: lastAction.previousAmount,
-        notes: lastAction.notes,
-      });
+      if (lastAction.previousStatus === 'pending') {
+        // Restores pristine uncollected pending state
+        await paymentRepo.resetToPending(lastAction.scheduleId);
+      } else {
+        // Restores exact previous amount/status (partial or missed)
+        await paymentRepo.recordPayment({
+          scheduleId: lastAction.scheduleId,
+          collectedAmount: lastAction.previousAmount,
+          notes: lastAction.notes,
+        });
+      }
       setToastMessage(isTe ? '✓ చర్య రద్దు చేయబడింది (Action Undone)' : '✓ Action Undone');
       setLastAction(null);
       await loadCollections();
@@ -134,16 +174,22 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
     }
   };
 
-  // 1-Tap Full Payment (Debounced & Guarded)
+  // 1-Tap Full Payment (Debounced, Guarded & Haptic)
   const handleMarkFullPaid = async (item: CollectionItem) => {
     if (processingId) return;
     setProcessingId(item.schedule.id);
 
     try {
+      // Haptic confirmation
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(40);
+      }
+
       // Save state for undo
       setLastAction({
         scheduleId: item.schedule.id,
         previousAmount: item.schedule.amountPaid || 0,
+        previousStatus: item.schedule.status,
         notes: item.schedule.notes,
       });
 
@@ -167,7 +213,7 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
     }
   };
 
-  // Mark Missed Payment (Debounced & Guarded)
+  // Mark Missed Payment (Debounced, Guarded)
   const handleMarkMissed = async (item: CollectionItem) => {
     if (processingId) return;
     setProcessingId(item.schedule.id);
@@ -177,6 +223,7 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
       setLastAction({
         scheduleId: item.schedule.id,
         previousAmount: item.schedule.amountPaid || 0,
+        previousStatus: item.schedule.status,
         notes: item.schedule.notes,
       });
 
@@ -200,16 +247,39 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
     }
   };
 
+  // Past Date Safety Interceptors
+  const onMarkFullPaidClicked = (item: CollectionItem) => {
+    if (selectedDate < todayIso) {
+      setPastDateConfirm({ type: 'full', item });
+    } else {
+      handleMarkFullPaid(item);
+    }
+  };
+
+  const onMarkMissedClicked = (item: CollectionItem) => {
+    if (selectedDate < todayIso) {
+      setPastDateConfirm({ type: 'missed', item });
+    } else {
+      handleMarkMissed(item);
+    }
+  };
+
   // Submit Partial Payment from Modal (Debounced & Guarded)
   const handleConfirmPartialPayment = async (amount: number, notes?: string) => {
     if (!modalItem || processingId) return;
     setProcessingId(modalItem.schedule.id);
 
     try {
+      // Haptic confirmation
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(40);
+      }
+
       // Save state for undo
       setLastAction({
         scheduleId: modalItem.schedule.id,
         previousAmount: modalItem.schedule.amountPaid || 0,
+        previousStatus: modalItem.schedule.status,
         notes: modalItem.schedule.notes,
       });
 
@@ -315,6 +385,8 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
   }, [items, statusFilter, searchQuery]);
 
   const isSelectedDateToday = selectedDate === todayIso;
+  const isPastDate = selectedDate < todayIso;
+  const isFutureDate = selectedDate > todayIso;
 
   return (
     <div className="p-4 space-y-4">
@@ -327,64 +399,126 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
       />
 
       {/* Date Navigator Header Card */}
-      <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-200 space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
+      <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-200 space-y-2.5">
+        <div className="flex items-center justify-between gap-1.5">
+          {/* Previous & Next Buttons */}
+          <div className="flex items-center space-x-1.5">
             <button
+              type="button"
               onClick={handlePrevDay}
-              className="w-12 h-12 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+              className="w-11 h-11 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 active:scale-95 transition-all"
               aria-label="Previous Day"
+              title={isTe ? 'మునుపటి రోజు' : 'Previous Day'}
             >
-              <ChevronLeft size={22} />
+              <ChevronLeft size={20} />
             </button>
             <button
+              type="button"
               onClick={handleNextDay}
-              className="w-12 h-12 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+              className="w-11 h-11 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 active:scale-95 transition-all"
               aria-label="Next Day"
+              title={isTe ? 'తరువాతి రోజు' : 'Next Day'}
             >
-              <ChevronRight size={22} />
+              <ChevronRight size={20} />
             </button>
           </div>
 
-          {/* Formatted Date & Day */}
-          <div className="text-center flex-1 px-2">
-            <p className="text-sm font-extrabold text-slate-900 leading-tight">
-              {formatDisplayDate(selectedDate, isTe)}
-            </p>
-            <p className="text-xs font-semibold text-teal-700">
+          {/* Formatted Date & Day Display (Clickable to open native calendar) */}
+          <button
+            type="button"
+            onClick={() => datePickerRef.current?.showPicker()}
+            className="text-center flex-1 px-1.5 py-1 rounded-xl hover:bg-slate-50 transition-colors group cursor-pointer"
+            title={isTe ? 'క్యాలెండర్ తెరవడానికి నొక్కండి' : 'Tap to open calendar'}
+          >
+            <div className="flex items-center justify-center gap-1.5">
+              <Calendar size={14} className="text-teal-700 group-hover:scale-110 transition-transform" />
+              <p className="text-xs sm:text-sm font-black text-slate-900 leading-tight">
+                {formatDisplayDate(selectedDate, isTe)}
+              </p>
+            </div>
+            <p className="text-[11px] font-semibold text-teal-700 mt-0.5">
               {getWeekdayName(selectedDate, isTe)}
-              {isSelectedDateToday && (
-                <span className="ml-1.5 bg-teal-100 text-teal-900 px-2 py-0.5 rounded-full text-[10px] font-black uppercase">
+              {isSelectedDateToday ? (
+                <span className="ml-1 bg-teal-100 text-teal-900 px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase">
                   {isTe ? 'ఈరోజు' : 'Today'}
+                </span>
+              ) : isFutureDate ? (
+                <span className="ml-1 bg-sky-100 text-sky-900 border border-sky-200 px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase">
+                  {isTe ? 'భవిష్యత్తు' : 'Future'}
+                </span>
+              ) : (
+                <span className="ml-1 bg-amber-100 text-amber-900 border border-amber-200 px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase">
+                  {isTe ? 'గత రికార్డు' : 'Past'}
                 </span>
               )}
             </p>
-          </div>
+          </button>
 
-          {/* Jump to Today Button or Calendar Picker */}
-          <div>
-            {!isSelectedDateToday ? (
+          {/* Right Action Buttons: Today Quick-Return + Native Calendar */}
+          <div className="flex items-center gap-1.5">
+            {!isSelectedDateToday && (
               <button
+                type="button"
                 onClick={handleToday}
-                className="min-h-[48px] px-3.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+                className="min-h-[44px] px-3 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1 shadow-sm active:scale-95"
+                title={isTe ? 'ఈరోజుకి తిరిగి వెళ్లండి' : 'Return to Today'}
               >
-                <Calendar size={16} />
-                <span>{isTe ? 'ఈరోజు' : 'Today'}</span>
+                <RotateCcw size={13} className="stroke-[2.5]" />
+                <span className="hidden xs:inline">{isTe ? 'ఈరోజు' : 'Today'}</span>
               </button>
-            ) : (
-              <label className="min-h-[48px] px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer">
-                <Calendar size={16} />
-                <span>{isTe ? 'తేదీ' : 'Date'}</span>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
-                  className="sr-only"
-                />
-              </label>
             )}
+
+            <button
+              type="button"
+              onClick={() => datePickerRef.current?.showPicker()}
+              className="min-h-[44px] min-w-[44px] bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center active:scale-95"
+              title={isTe ? 'క్యాలెండర్' : 'Calendar'}
+            >
+              <Calendar size={18} />
+            </button>
+
+            <input
+              ref={datePickerRef}
+              type="date"
+              value={selectedDate}
+              onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
+              className="sr-only"
+            />
           </div>
         </div>
+
+        {/* Informational Banner for Future Dates */}
+        {isFutureDate && (
+          <div className="bg-sky-50 border border-sky-200 text-sky-950 rounded-xl p-2.5 flex items-center gap-2 text-xs font-semibold animate-fade-in">
+            <Info size={16} className="text-sky-700 shrink-0" />
+            <span>
+              {isTe
+                ? 'భవిష్యత్తు షెడ్యూల్ (View Only): రావలసిన వసూళ్ల ప్రణాళిక మాత్రమే. వసూళ్లు ఆనాటి లేదా మునుపటి తేదీలలో మాత్రమే నమోదు చేయవచ్చు.'
+                : 'Future Schedule (View Only): Advance collections can only be recorded on or after the scheduled date.'}
+            </span>
+          </div>
+        )}
+
+        {/* Warning Banner for Past Dates */}
+        {isPastDate && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-950 rounded-xl p-2.5 flex items-center justify-between gap-2 text-xs font-semibold animate-fade-in">
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={16} className="text-amber-700 shrink-0" />
+              <span>
+                {isTe
+                  ? 'గత రికార్డులను చూస్తున్నారు. మార్పులకు నిర్ధారణ అవసరం.'
+                  : 'Viewing past ledger. Changes require confirmation.'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleToday}
+              className="text-teal-800 underline font-black shrink-0 text-[11px]"
+            >
+              {isTe ? 'ఈరోజుకి వెళ్లండి →' : 'Go to Today →'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 3 Metric Cards: Target, Collected, Pending */}
@@ -708,17 +842,32 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
                   )}
 
                   {/* Action Buttons Row */}
-                  {isPending ? (
+                  {isFutureDate ? (
+                    /* Future Date: Read-Only Schedule View (No Payment Actions to Prevent Chaos) */
+                    <div className="bg-slate-50 border border-slate-200 text-slate-700 p-2.5 rounded-xl flex items-center justify-between text-xs font-bold">
+                      <span className="flex items-center gap-1.5 text-slate-600">
+                        <Calendar size={14} className="text-teal-700" />
+                        <span>{isTe ? 'రావలసిన వాయిదా (Scheduled)' : 'Scheduled Installment'}</span>
+                      </span>
+                      <span className="text-slate-900 font-extrabold">{formatINR(schedule.amountDue)}</span>
+                    </div>
+                  ) : isPending ? (
                     /* Pending State: 3-Button Action Grid (56px Primary Touch Targets) */
                     <div className="grid grid-cols-3 gap-2 pt-1">
                       {/* 1-Tap Full Paid Button (56px) */}
                       <button
                         type="button"
                         disabled={Boolean(processingId)}
-                        onClick={() => handleMarkFullPaid(item)}
-                        className="col-span-1 min-h-[56px] rounded-2xl bg-teal-700 hover:bg-teal-800 disabled:opacity-50 active:scale-95 text-white font-extrabold text-xs shadow-md transition-all flex flex-col items-center justify-center p-1"
+                        onClick={() => onMarkFullPaidClicked(item)}
+                        className={`col-span-1 min-h-[56px] rounded-2xl bg-teal-700 hover:bg-teal-800 disabled:opacity-50 active:scale-95 text-white font-extrabold text-xs shadow-md transition-all flex flex-col items-center justify-center p-1 ${
+                          processingId === item.schedule.id ? 'opacity-70 cursor-wait' : ''
+                        }`}
                       >
-                        <Check size={20} />
+                        {processingId === item.schedule.id ? (
+                          <Loader2 size={20} className="animate-spin text-white" />
+                        ) : (
+                          <Check size={20} />
+                        )}
                         <span className="mt-0.5">{isTe ? 'పూర్తి వసూలు' : 'Full Paid'}</span>
                       </button>
 
@@ -737,7 +886,7 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
                       <button
                         type="button"
                         disabled={Boolean(processingId)}
-                        onClick={() => handleMarkMissed(item)}
+                        onClick={() => onMarkMissedClicked(item)}
                         className="col-span-1 min-h-[56px] rounded-2xl bg-slate-100 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300 border border-slate-200 disabled:opacity-50 active:scale-95 text-slate-700 font-extrabold text-xs transition-all flex flex-col items-center justify-center p-1"
                       >
                         <AlertTriangle size={20} />
@@ -755,7 +904,11 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
                         className="min-h-[48px] rounded-xl border-2 border-rose-200 bg-rose-50 hover:bg-rose-100 active:scale-95 text-rose-800 font-bold text-xs flex items-center justify-center gap-2 transition-all disabled:opacity-50"
                         title={isTe ? 'బాకీగా మార్చు (రీసెట్)' : 'Reset to Pending Queue'}
                       >
-                        <RotateCcw size={15} />
+                        {processingId === item.schedule.id ? (
+                          <Loader2 size={15} className="animate-spin text-rose-700" />
+                        ) : (
+                          <RotateCcw size={15} />
+                        )}
                         <span>{isTe ? 'బాకీగా మార్చు' : 'Reset to Pending'}</span>
                       </button>
 
@@ -792,6 +945,69 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ language }) =>
           currentStatus={modalItem.schedule.status}
           onConfirm={handleConfirmPartialPayment}
         />
+      )}
+
+      {/* Past Date Safety Confirmation Modal */}
+      {pastDateConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-3xl p-5 max-w-sm w-full shadow-2xl border-2 border-amber-300 space-y-4 animate-scale-in">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                <AlertTriangle size={24} />
+              </div>
+              <div>
+                <h4 className="text-base font-extrabold text-slate-900 leading-tight">
+                  {isTe ? 'గత తేదీ వసూలు నిర్ధారణ' : 'Confirm Past Date Entry'}
+                </h4>
+                <p className="text-xs font-semibold text-slate-500 mt-0.5">
+                  {formatDisplayDate(selectedDate, isTe)}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 rounded-2xl p-3.5 border border-amber-200 text-xs text-amber-950 space-y-1.5">
+              <p className="font-bold">
+                {pastDateConfirm.type === 'full'
+                  ? isTe
+                    ? `మీరు గత తేదీ రికార్డును మారుస్తున్నారు. ${pastDateConfirm.item.borrower.name} నుండి ₹${pastDateConfirm.item.schedule.amountDue.toLocaleString('en-IN')} పూర్తి వసూలు నమోదు చేయాలా?`
+                    : `You are recording a retrospective payment of ₹${pastDateConfirm.item.schedule.amountDue.toLocaleString('en-IN')} for ${pastDateConfirm.item.borrower.name}.`
+                  : isTe
+                    ? `మీరు గత తేదీ రికార్డును మారుస్తున్నారు. ${pastDateConfirm.item.borrower.name} కి ఈ వాయిదా 'తప్పింది' (Missed) గా నమోదు చేయాలా?`
+                    : `You are marking installment as Missed for ${pastDateConfirm.item.borrower.name} on a past date.`}
+              </p>
+              <p className="text-[11px] text-amber-800 opacity-90">
+                {isTe
+                  ? '⚠️ ఇది గత పుస్తకాల లెక్కలను మరియు నిల్వను మారుస్తుంది.'
+                  : '⚠️ This will update historical ledger records and loan balance.'}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setPastDateConfirm(null)}
+                className="min-h-[48px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs active:scale-95 transition-all"
+              >
+                {isTe ? 'రద్దు చేయి (Cancel)' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const { type, item } = pastDateConfirm;
+                  setPastDateConfirm(null);
+                  if (type === 'full') {
+                    handleMarkFullPaid(item);
+                  } else {
+                    handleMarkMissed(item);
+                  }
+                }}
+                className="min-h-[48px] rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-xs shadow-md active:scale-95 transition-all"
+              >
+                {isTe ? 'అవును, నమోదు చేయి' : 'Yes, Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
