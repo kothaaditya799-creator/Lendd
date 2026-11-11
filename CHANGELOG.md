@@ -6,6 +6,65 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Engineering Hygiene & CI Readiness] - 2026-11-11
+### Added
+- **Unified CLI Verification (`src/tests/runAllCli.mjs`) & Scripts (`package.json`)**:
+  - Replaced broken unconfigured `lint` script with working `typecheck`, `test`, `build`, and `verify` scripts (`npm run verify` runs strict TypeScript checks, all Phase 3–7 CLI suites, and production Vite bundle).
+  - Added Node `fs` verification in `src/tests/runPhase7Cli.mjs` validating `public/manifest.json` and `public/sw.js`.
+- **CI/CD & Documentation**:
+  - Added GitHub Actions CI pipeline (`.github/workflows/ci.yml`) on Node 22.
+  - Added `.env.example` template for Supabase client keys and `README.md` engineering guide.
+  - Synchronized `PHASE_TRACKER.md` and `CHANGELOG.md` with completed Phases 6–7.
+
+### Changed
+- Guarded `src/main.tsx` dev test suite import behind `import.meta.env.DEV` so verification modules never execute or bundle for production.
+- Tightened origin comparison in `public/sw.js` (`url.origin !== self.location.origin`) and cleaned `src/utils/lenderId.ts`.
+
+---
+
+## [Phase 7: Cloud Sync Engine (Supabase), RLS & Offline PWA] - 2026-11-05
+### Added
+- **PostgreSQL Cloud Schema & RLS (`supabase/migrations/20261105000000_init_lendtrack.sql`)**:
+  - Defined `borrowers`, `loans`, and `payment_schedule` tables with indexes, `updated_at` triggers, and multi-tenant RLS policies supporting authenticated `auth.uid()` and anonymous device tenant `lender_id` UUIDs.
+- **Offline-Resilient Cloud Sync Engine (`src/db/supabaseClient.ts`, `src/db/syncEngine.ts`)**:
+  - Zero-dependency PostgREST client with automatic `camelCase` ↔ `snake_case` mapping.
+  - FIFO `syncQueue` worker with exponential backoff + jitter (`2s`–`60s`), LWW timestamp utilities, queue preservation when Supabase is unconfigured, and `pushAllLocalDataToCloud()` for initial migration.
+  - Persistent RFC 4122 v4 UUID generation (`src/utils/lenderId.ts`) replacing placeholder `'local-lender'` strings.
+- **PWA Service Worker & Sync UI (`public/sw.js`, `src/utils/pwaRegistration.ts`, `src/hooks/useSyncStatus.ts`)**:
+  - Network-first navigation fallback + stale-while-revalidate static asset caching and native `beforeinstallprompt` install support.
+  - Real-time sync indicator badge in `TopHeader.tsx` (≥44px touch targets) and cloud configuration/sync/install controls in `SettingsModal.tsx`.
+- **Automated Verification (`src/tests/phase7Verification.ts`, `src/tests/runPhase7Cli.mjs`)**:
+  - Added unit tests covering case conversion, config persistence, backoff math, LWW comparison, and queue preservation/draining.
+  - Wired Phases 5–7 into `src/tests/runTests.ts`.
+
+### Verified
+- Independent Senior Code Reviewer Subagent (`phase-code-reviewer`) issued formal **APPROVED** sign-off (`056fefb`).
+
+---
+
+## [Ledger Hardening & UX Guard Rails] - 2026-11-05
+### Added & Fixed
+- **EOD Date Bounds & Navigation (`src/pages/InsightsPage.tsx`)**:
+  - Capped Daily Cash Tally strictly to today and past dates (no speculative future EOD tallies), added 1-tap `Today` return button, replaced sun emoji `🌅` with clean receipt/clipboard icons, and introduced a single-row date navigator bar with midnight rollover focus sync.
+- **Collections Safety Guard Rails (`src/pages/CollectionsPage.tsx`, `src/db/repositories/paymentRepo.ts`)**:
+  - Future dates forced to view-only schedule mode (action buttons disabled).
+  - Past dates require a 2-step confirmation modal before altering historical records.
+  - Fixed Undo behavior via `paymentRepo.resetToPending()` so reversing a mistaken payment restores the borrower's prior `pending` status rather than marking `missed`.
+  - Fixed mobile calendar picker opening via explicit `datePickerRef.current?.showPicker()` and added anti-double-tap button freeze state.
+
+---
+
+## [Phase 6: Security Gate, 4-Digit PIN Lock & Biometrics] - 2026-11-03
+### Added
+- **Client Vault Security (`src/utils/security.ts`, `src/utils/biometrics.ts`)**:
+  - Salted SHA-256 hashing (`crypto.subtle.digest`) for 4-digit PINs, rate-limiting (5 failed attempts trigger 30s lockout cooldown persisting on mount), recovery phone/email checks, emergency data wipe, and WebAuthn platform biometric support.
+- **Lock Screen & Auto-Lock (`src/components/security/PinLockScreen.tsx`, `src/hooks/useAutoLock.ts`)**:
+  - Fullscreen high-contrast numeric PIN pad, configurable inactivity auto-lock timer, quick lock button in `TopHeader.tsx`, and security settings controls in `SettingsModal.tsx`.
+- **Automated Verification (`src/tests/phase6Verification.ts`, `src/tests/runPhase6Cli.mjs`)**:
+  - 38/38 automated security, salt, rate-limit, cooldown, and pin-rotation tests passing.
+
+---
+
 ## [Phase 5: Decision Intelligence & Portfolio Insights Dashboard] - 2026-11-02
 ### Added
 - **Analytics & Intelligence Engine (`src/utils/portfolioAnalytics.ts`)**:

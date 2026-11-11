@@ -4,7 +4,10 @@ import App from './App';
 import './index.css';
 import { requestStoragePersistence } from './db/storagePersistence';
 import { registerServiceWorker } from './utils/pwaRegistration';
-import './tests/runTests';
+
+if (import.meta.env.DEV) {
+  import('./tests/runTests');
+}
 
 // Register PWA Service Worker for offline resilience
 registerServiceWorker();
