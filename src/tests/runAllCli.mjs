@@ -35,3 +35,4 @@ for (const suite of suites) {
 }
 
 console.log('✅ All CLI verification suites passed successfully.');
+

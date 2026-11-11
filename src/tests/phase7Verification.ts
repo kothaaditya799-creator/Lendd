@@ -15,6 +15,7 @@
 import {
   toSnakeCase,
   toCamelCase,
+  stripNullValues,
   saveSupabaseConfig,
   getSupabaseConfig,
   clearSupabaseConfig,
@@ -30,7 +31,15 @@ import {
   drainSyncQueue,
   enqueueSyncItem,
   clearSyncQueue,
+  normalizeRemoteRecord,
+  planCloudMerge,
 } from '../db/syncEngine.ts';
+
+import {
+  getOrCreateLenderId,
+  setLenderId,
+  isValidUUID,
+} from '../utils/lenderId.ts';
 
 export interface TestResult {
   name: string;
@@ -257,6 +266,70 @@ export async function runPhase7Verification(): Promise<{
 
   // Clean up
   await clearSyncQueue();
+
+  // =========================================================================
+  // 7. Cloud Pull, SQL Null Stripping, Sync ID Binding & LWW Merge Plan
+  // =========================================================================
+  const cleanedRow = stripNullValues({
+    id: '11111111-1111-4111-8111-111111111111',
+    name: 'Suresh',
+    secondaryPhone: null,
+    advanceBalance: 0,
+    isActive: false,
+  });
+  assert(
+    'Cloud Pull: stripNullValues removes SQL null optional fields',
+    !('secondaryPhone' in cleanedRow)
+  );
+  assert(
+    'Cloud Pull: stripNullValues preserves falsy 0 and false values',
+    cleanedRow.advanceBalance === 0 && cleanedRow.isActive === false
+  );
+
+  const normalizedBorrower = normalizeRemoteRecord('borrowers', {
+    id: '11111111-1111-4111-8111-111111111111',
+    lenderId: '22222222-2222-4222-8222-222222222222',
+    name: 'Ramesh',
+    phone: '9876543210',
+    trustScore: '8.5',
+    advanceBalance: '0',
+    isActive: true,
+    createdAt: '2026-11-05T10:00:00Z',
+    updatedAt: '2026-11-05T10:00:00Z',
+  });
+  assert(
+    'Cloud Pull: normalizeRemoteRecord coerces Postgres numeric strings cleanly',
+    'trustScore' in normalizedBorrower && normalizedBorrower.trustScore === 8.5
+  );
+
+  assert('Sync ID: isValidUUID rejects legacy string', !isValidUUID('local-lender'));
+  assert(
+    'Sync ID: setLenderId stores and restores valid UUID',
+    setLenderId('33333333-3333-4333-8333-333333333333') &&
+      getOrCreateLenderId() === '33333333-3333-4333-8333-333333333333'
+  );
+
+  const mergePlan = planCloudMerge(
+    [
+      { id: 'r1', updatedAt: '2026-11-05T10:00:00Z', label: 'old-local' },
+      { id: 'r2', updatedAt: '2026-11-05T12:00:00Z', label: 'newer-local' },
+      { id: 'r3', updatedAt: '2026-11-05T08:00:00Z', label: 'dirty-local' },
+    ],
+    [
+      { id: 'r1', updatedAt: '2026-11-05T11:00:00Z', label: 'newer-remote' },
+      { id: 'r2', updatedAt: '2026-11-05T11:00:00Z', label: 'older-remote' },
+      { id: 'r3', updatedAt: '2026-11-05T14:00:00Z', label: 'remote-vs-dirty' },
+      { id: 'r4', updatedAt: '2026-11-05T09:00:00Z', label: 'new-from-cloud' },
+    ],
+    new Set(['r3'])
+  );
+  assert('Cloud Merge: Inserts new record (r4) and updates older local (r1)', mergePlan.inserted === 1 && mergePlan.updated === 1);
+  assert('Cloud Merge: Skips older remote record (r2)', mergePlan.skippedOlderOrEqual === 1);
+  assert('Cloud Merge: Protects dirty un-pushed local record (r3)', mergePlan.skippedDirty === 1);
+  assert(
+    'Cloud Merge: Output contains exact upserts r1 (remote) and r4 (new)',
+    mergePlan.toPut.length === 2 && mergePlan.toPut[0].label === 'newer-remote' && mergePlan.toPut[1].id === 'r4'
+  );
 
   const total = results.length;
   const passed = results.filter((r) => r.passed).length;

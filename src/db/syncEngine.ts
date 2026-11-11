@@ -10,11 +10,21 @@
  */
 
 import { db } from './dexie.ts';
-import type { SyncQueueItem } from '../types/domain.ts';
+import {
+  BorrowerSchema,
+  LoanSchema,
+  PaymentScheduleSchema,
+  type Borrower,
+  type Loan,
+  type PaymentSchedule,
+  type SyncQueueItem,
+} from '../types/domain.ts';
+import { DEFAULT_FALLBACK_UUID, getOrCreateLenderId } from '../utils/lenderId.ts';
 import {
   isSupabaseConfigured,
   upsertCloudRecord,
   deleteCloudRecord,
+  fetchCloudRecords,
 } from './supabaseClient.ts';
 
 export interface SyncEngineState {
@@ -23,6 +33,7 @@ export interface SyncEngineState {
   pendingCount: number;
   lastSyncTimestamp: number | null;
   lastError: string | null;
+  dataRevision: number;
 }
 
 const LAST_SYNC_KEY = 'lendtrack_last_sync_timestamp';
@@ -33,6 +44,7 @@ const MAX_BACKOFF_MS = 60000;
 let consecutiveFailures = 0;
 let backoffTimer: ReturnType<typeof setTimeout> | null = null;
 let isCurrentlySyncing = false;
+let dataRevision = 0;
 
 // Subscribers for real-time reactive UI updates
 type SyncStateListener = (state: SyncEngineState) => void;
@@ -144,6 +156,20 @@ export async function getPendingSyncCount(): Promise<number> {
 }
 
 /**
+ * Read all queued mutations in strict FIFO order (with in-memory fallback for CLI tests).
+ */
+async function getQueuedItems(): Promise<SyncQueueItem[]> {
+  try {
+    if (typeof indexedDB !== 'undefined') {
+      return await db.syncQueue.orderBy('id').toArray();
+    }
+  } catch {
+    // Fall through to in-memory fallback
+  }
+  return [...inMemoryQueue].sort((a, b) => (a.id || 0) - (b.id || 0));
+}
+
+/**
  * Read the current snapshot of Sync Engine state.
  */
 export async function getSyncEngineState(): Promise<SyncEngineState> {
@@ -154,6 +180,7 @@ export async function getSyncEngineState(): Promise<SyncEngineState> {
     pendingCount,
     lastSyncTimestamp: getLastSyncTimestamp(),
     lastError: consecutiveFailures > 0 ? `Connection retry in progress (${consecutiveFailures})` : null,
+    dataRevision,
   };
 }
 
@@ -220,16 +247,7 @@ export async function drainSyncQueue(options?: {
 
   try {
     // Read queue items in strict FIFO order (by auto-incrementing id)
-    let queueItems: SyncQueueItem[] = [];
-    try {
-      if (typeof indexedDB !== 'undefined') {
-        queueItems = await db.syncQueue.orderBy('id').toArray();
-      } else {
-        queueItems = [...inMemoryQueue].sort((a, b) => (a.id || 0) - (b.id || 0));
-      }
-    } catch {
-      queueItems = [...inMemoryQueue].sort((a, b) => (a.id || 0) - (b.id || 0));
-    }
+    const queueItems = await getQueuedItems();
 
     if (queueItems.length === 0) {
       consecutiveFailures = 0;
@@ -316,12 +334,216 @@ export async function drainSyncQueue(options?: {
   }
 }
 
+const NUMERIC_FIELDS_BY_TABLE: Record<'borrowers' | 'loans' | 'payment_schedule', readonly string[]> = {
+  borrowers: ['trustScore', 'advanceBalance'],
+  loans: [
+    'principalAmount',
+    'totalRepaymentAmount',
+    'installmentAmount',
+    'totalInstallments',
+    'interestRateMonthly',
+    'accumulatedUnpaidInterest',
+    'totalCollected',
+    'outstandingBalance',
+  ],
+  payment_schedule: ['amountDue', 'amountPaid'],
+};
+
 /**
- * Manually trigger sync execution on demand.
+ * Coerce Postgres NUMERIC/BIGINT string serializations and validate against Zod domain schemas.
+ */
+export function normalizeRemoteRecord(
+  table: 'borrowers' | 'loans' | 'payment_schedule',
+  rawCamelRecord: Record<string, unknown>
+): Borrower | Loan | PaymentSchedule {
+  const coerced: Record<string, unknown> = { ...rawCamelRecord };
+  for (const field of NUMERIC_FIELDS_BY_TABLE[table]) {
+    const val = coerced[field];
+    if (typeof val === 'string' && val.trim() !== '') {
+      const parsed = Number(val);
+      if (Number.isFinite(parsed)) {
+        coerced[field] = parsed;
+      }
+    }
+  }
+
+  if (table === 'borrowers') return BorrowerSchema.parse(coerced);
+  if (table === 'loans') return LoanSchema.parse(coerced);
+  return PaymentScheduleSchema.parse(coerced);
+}
+
+/**
+ * Pure LWW Cloud Merge Planner:
+ * Never overwrites records with pending local syncQueue mutations (dirtyRecordIds),
+ * inserts missing records, and overwrites existing local records only if remote is strictly newer.
+ */
+export function planCloudMerge<T extends { id: string; updatedAt: string }>(
+  localRecords: T[],
+  remoteRecords: T[],
+  dirtyRecordIds: Set<string>
+): {
+  toPut: T[];
+  inserted: number;
+  updated: number;
+  skippedDirty: number;
+  skippedOlderOrEqual: number;
+} {
+  const localMap = new Map<string, T>();
+  for (const item of localRecords) {
+    localMap.set(item.id, item);
+  }
+
+  const toPut: T[] = [];
+  let inserted = 0;
+  let updated = 0;
+  let skippedDirty = 0;
+  let skippedOlderOrEqual = 0;
+
+  for (const remote of remoteRecords) {
+    if (dirtyRecordIds.has(remote.id)) {
+      skippedDirty++;
+      continue;
+    }
+
+    const local = localMap.get(remote.id);
+    if (!local) {
+      toPut.push(remote);
+      inserted++;
+    } else if (isRemoteNewer(remote.updatedAt, local.updatedAt)) {
+      toPut.push(remote);
+      updated++;
+    } else {
+      skippedOlderOrEqual++;
+    }
+  }
+
+  return { toPut, inserted, updated, skippedDirty, skippedOlderOrEqual };
+}
+
+/**
+ * Cloud Pull / Multi-Device Restore:
+ * Downloads borrowers, loans, and schedules for the lender UUID from Supabase,
+ * validates schemas, and merges into Dexie using LWW without re-enqueuing syncQueue items.
+ */
+export async function pullAllCloudData(options?: {
+  targetLenderId?: string;
+}): Promise<{
+  borrowersApplied: number;
+  loansApplied: number;
+  schedulesApplied: number;
+  totalApplied: number;
+  success: boolean;
+  error?: string;
+}> {
+  if (!isSupabaseConfigured()) {
+    return {
+      borrowersApplied: 0,
+      loansApplied: 0,
+      schedulesApplied: 0,
+      totalApplied: 0,
+      success: false,
+      error: 'Supabase credentials not configured',
+    };
+  }
+
+  if (!checkIsOnline()) {
+    return {
+      borrowersApplied: 0,
+      loansApplied: 0,
+      schedulesApplied: 0,
+      totalApplied: 0,
+      success: false,
+      error: 'Device is offline',
+    };
+  }
+
+  const targetLenderId = options?.targetLenderId?.trim() || getOrCreateLenderId();
+
+  isCurrentlySyncing = true;
+  await notifyListeners();
+
+  try {
+    const queueItems = await getQueuedItems();
+    const dirtyRecordIds = new Set(queueItems.map((item) => item.recordId));
+
+    const [borRes, loanRes, schedRes] = await Promise.all([
+      fetchCloudRecords('borrowers', targetLenderId),
+      fetchCloudRecords('loans', targetLenderId),
+      fetchCloudRecords('payment_schedule', targetLenderId),
+    ]);
+
+    if (!borRes.ok) throw new Error(borRes.error || 'Failed to pull borrowers');
+    if (!loanRes.ok) throw new Error(loanRes.error || 'Failed to pull loans');
+    if (!schedRes.ok) throw new Error(schedRes.error || 'Failed to pull payment schedules');
+
+    const remoteBorrowers = borRes.records.map((r) => normalizeRemoteRecord('borrowers', r) as Borrower);
+    const remoteLoans = loanRes.records.map((r) => normalizeRemoteRecord('loans', r) as Loan);
+    const remoteSchedules = schedRes.records.map(
+      (r) => normalizeRemoteRecord('payment_schedule', r) as PaymentSchedule
+    );
+
+    let borrowersApplied = 0;
+    let loansApplied = 0;
+    let schedulesApplied = 0;
+
+    await db.transaction('rw', [db.borrowers, db.loans, db.schedules], async () => {
+      const [localBorrowers, localLoans, localSchedules] = await Promise.all([
+        db.borrowers.toArray(),
+        db.loans.toArray(),
+        db.schedules.toArray(),
+      ]);
+
+      const borPlan = planCloudMerge(localBorrowers, remoteBorrowers, dirtyRecordIds);
+      const loanPlan = planCloudMerge(localLoans, remoteLoans, dirtyRecordIds);
+      const schedPlan = planCloudMerge(localSchedules, remoteSchedules, dirtyRecordIds);
+
+      if (borPlan.toPut.length > 0) await db.borrowers.bulkPut(borPlan.toPut);
+      if (loanPlan.toPut.length > 0) await db.loans.bulkPut(loanPlan.toPut);
+      if (schedPlan.toPut.length > 0) await db.schedules.bulkPut(schedPlan.toPut);
+
+      borrowersApplied = borPlan.inserted + borPlan.updated;
+      loansApplied = loanPlan.inserted + loanPlan.updated;
+      schedulesApplied = schedPlan.inserted + schedPlan.updated;
+    });
+
+    const totalApplied = borrowersApplied + loansApplied + schedulesApplied;
+    if (totalApplied > 0) {
+      dataRevision++;
+    }
+
+    setLastSyncTimestamp(Date.now());
+    isCurrentlySyncing = false;
+    await notifyListeners();
+
+    return {
+      borrowersApplied,
+      loansApplied,
+      schedulesApplied,
+      totalApplied,
+      success: true,
+    };
+  } catch (err: unknown) {
+    isCurrentlySyncing = false;
+    await notifyListeners();
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      borrowersApplied: 0,
+      loansApplied: 0,
+      schedulesApplied: 0,
+      totalApplied: 0,
+      success: false,
+      error: message,
+    };
+  }
+}
+
+/**
+ * Manually trigger bidirectional sync on demand: pushes pending local mutations, then pulls remote updates.
  */
 export async function triggerManualSync(): Promise<{
   processedCount: number;
   remainingCount: number;
+  pulledCount: number;
   success: boolean;
   error?: string;
 }> {
@@ -329,7 +551,29 @@ export async function triggerManualSync(): Promise<{
     clearTimeout(backoffTimer);
     backoffTimer = null;
   }
-  return await drainSyncQueue();
+
+  const pushRes = await drainSyncQueue();
+  if (!pushRes.success || !isSupabaseConfigured()) {
+    return { ...pushRes, pulledCount: 0 };
+  }
+
+  const pullRes = await pullAllCloudData();
+  if (!pullRes.success) {
+    return {
+      processedCount: pushRes.processedCount,
+      remainingCount: pushRes.remainingCount,
+      pulledCount: 0,
+      success: false,
+      error: pullRes.error,
+    };
+  }
+
+  return {
+    processedCount: pushRes.processedCount,
+    remainingCount: pushRes.remainingCount,
+    pulledCount: pullRes.totalApplied,
+    success: true,
+  };
 }
 
 /**
@@ -339,7 +583,7 @@ export function initSyncEngine(): () => void {
   const onOnline = () => {
     consecutiveFailures = 0;
     notifyListeners();
-    drainSyncQueue();
+    triggerManualSync();
   };
 
   const onOffline = () => {
@@ -372,6 +616,22 @@ export function initSyncEngine(): () => void {
   };
 }
 
+async function pushTableRecords<T extends { lenderId: string }>(
+  table: 'borrowers' | 'loans' | 'payment_schedule',
+  records: T[],
+  activeLenderId: string
+): Promise<number> {
+  for (const record of records) {
+    const normalizedRecord =
+      record.lenderId === DEFAULT_FALLBACK_UUID
+        ? { ...record, lenderId: activeLenderId }
+        : record;
+    const res = await upsertCloudRecord(table, normalizedRecord as Record<string, unknown>);
+    if (!res.ok) throw new Error(res.error || `Failed to push ${table}`);
+  }
+  return records.length;
+}
+
 /**
  * Full Cloud Push:
  * Pushes all local borrowers, loans, and schedules to Supabase.
@@ -398,23 +658,16 @@ export async function pushAllLocalDataToCloud(): Promise<{
   await notifyListeners();
 
   try {
-    const allBorrowers = await db.borrowers.toArray();
-    for (const borrower of allBorrowers) {
-      const res = await upsertCloudRecord('borrowers', borrower);
-      if (!res.ok) throw new Error(res.error || 'Failed to push borrower');
-    }
+    const activeLenderId = getOrCreateLenderId();
+    const [allBorrowers, allLoans, allSchedules] = await Promise.all([
+      db.borrowers.toArray(),
+      db.loans.toArray(),
+      db.schedules.toArray(),
+    ]);
 
-    const allLoans = await db.loans.toArray();
-    for (const loan of allLoans) {
-      const res = await upsertCloudRecord('loans', loan);
-      if (!res.ok) throw new Error(res.error || 'Failed to push loan');
-    }
-
-    const allSchedules = await db.schedules.toArray();
-    for (const sched of allSchedules) {
-      const res = await upsertCloudRecord('payment_schedule', sched);
-      if (!res.ok) throw new Error(res.error || 'Failed to push schedule');
-    }
+    const borrowersCount = await pushTableRecords('borrowers', allBorrowers, activeLenderId);
+    const loansCount = await pushTableRecords('loans', allLoans, activeLenderId);
+    const schedulesCount = await pushTableRecords('payment_schedule', allSchedules, activeLenderId);
 
     await clearSyncQueue();
     setLastSyncTimestamp(Date.now());
@@ -422,9 +675,9 @@ export async function pushAllLocalDataToCloud(): Promise<{
     await notifyListeners();
 
     return {
-      borrowersCount: allBorrowers.length,
-      loansCount: allLoans.length,
-      schedulesCount: allSchedules.length,
+      borrowersCount,
+      loansCount,
+      schedulesCount,
       success: true,
     };
   } catch (err: unknown) {

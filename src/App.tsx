@@ -23,7 +23,8 @@ export const App: React.FC = () => {
   const { isLocked, lock, unlock, isPrivacyCurtainVisible } = useAutoLock();
 
   // Phase 7: Cloud Sync Engine & Real-Time Connectivity
-  const { isOnline, isSyncing, pendingCount, lastSyncTimestamp, syncNow } = useSyncStatus();
+  const { isOnline, isSyncing, pendingCount, lastSyncTimestamp, dataRevision, syncNow } =
+    useSyncStatus();
 
   const handleLock = () => {
     const cfg = getSecurityConfig();
@@ -51,10 +52,11 @@ export const App: React.FC = () => {
   const renderCurrentView = () => {
     switch (activeTab) {
       case 'collections':
-        return <CollectionsPage language={language} />;
+        return <CollectionsPage key={`collections-${dataRevision}`} language={language} />;
       case 'borrowers':
         return (
           <BorrowersPage
+            key={`borrowers-${dataRevision}`}
             language={language}
             onNavigateToNewLoan={handleNavigateToNewLoan}
           />
@@ -68,9 +70,9 @@ export const App: React.FC = () => {
           />
         );
       case 'insights':
-        return <InsightsPage language={language} />;
+        return <InsightsPage key={`insights-${dataRevision}`} language={language} />;
       default:
-        return <CollectionsPage language={language} />;
+        return <CollectionsPage key={`collections-${dataRevision}`} language={language} />;
     }
   };
 

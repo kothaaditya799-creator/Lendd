@@ -192,6 +192,19 @@ export async function upsertCloudRecord(
 }
 
 /**
+ * Removes SQL null values so optional Zod fields validate as undefined.
+ */
+export function stripNullValues(obj: Record<string, unknown>): Record<string, unknown> {
+  const cleaned: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== null && value !== undefined) {
+      cleaned[key] = value;
+    }
+  }
+  return cleaned;
+}
+
+/**
  * PostgREST Delete record by ID.
  */
 export async function deleteCloudRecord(
@@ -204,4 +217,52 @@ export async function deleteCloudRecord(
       Prefer: 'return=minimal',
     },
   });
+}
+
+/**
+ * PostgREST Paginated Fetch for a lender's cloud records.
+ * Converts snake_case rows to camelCase and strips SQL nulls cleanly.
+ */
+export async function fetchCloudRecords(
+  table: 'borrowers' | 'loans' | 'payment_schedule',
+  lenderId: string
+): Promise<{ ok: boolean; records: Record<string, unknown>[]; error?: string }> {
+  if (!lenderId.trim()) {
+    return { ok: false, records: [], error: 'Missing lenderId for cloud fetch' };
+  }
+
+  const pageSize = 1000;
+  let offset = 0;
+  const collected: Record<string, unknown>[] = [];
+
+  while (true) {
+    const query = `${table}?lender_id=eq.${encodeURIComponent(
+      lenderId.trim()
+    )}&select=*&order=created_at.asc&limit=${pageSize}&offset=${offset}`;
+
+    const res = await executeSupabaseRest(query, {
+      method: 'GET',
+      headers: {
+        Prefer: 'return=representation',
+      },
+    });
+
+    if (!res.ok) {
+      return { ok: false, records: [], error: res.error || `Failed to fetch ${table}` };
+    }
+
+    const rows = Array.isArray(res.data) ? res.data : [];
+    for (const row of rows) {
+      if (row && typeof row === 'object') {
+        collected.push(stripNullValues(toCamelCase(row as Record<string, unknown>)));
+      }
+    }
+
+    if (rows.length < pageSize) {
+      break;
+    }
+    offset += pageSize;
+  }
+
+  return { ok: true, records: collected };
 }

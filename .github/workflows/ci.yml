@@ -32,3 +32,4 @@ jobs:
 
       - name: Build production PWA bundle
         run: npm run build
+

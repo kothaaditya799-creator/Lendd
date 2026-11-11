@@ -14,6 +14,7 @@ export function useSyncStatus() {
     pendingCount: 0,
     lastSyncTimestamp: null,
     lastError: null,
+    dataRevision: 0,
   });
 
   useEffect(() => {

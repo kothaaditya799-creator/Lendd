@@ -44,7 +44,7 @@ npm run dev
 | :--- | :--- |
 | `npm run dev` | Starts Vite development server (also runs DEV browser verification suites in console) |
 | `npm run typecheck` | Runs strict TypeScript compiler checks (`tsc --noEmit`) |
-| `npm test` | Runs all CLI verification suites across Phases 3–7 (`212/212` assertions via `src/tests/runAllCli.mjs`) |
+| `npm test` | Runs all CLI verification suites across Phases 3–7 (`221/221` assertions via `src/tests/runAllCli.mjs`) |
 | `npm run build` | Compiles TypeScript and builds production PWA bundle into `dist/` |
 | `npm run verify` | Full CI gate: runs `typecheck`, `test`, and `build` sequentially |
 | `npm run preview` | Serves production `dist/` bundle locally |
@@ -76,3 +76,4 @@ npm run dev
 - [`PROJECT_SPECIFICATION.md`](./PROJECT_SPECIFICATION.md) — Product requirements, lending models, guard rails & database design
 - [`PHASE_TRACKER.md`](./PHASE_TRACKER.md) — Current build status and remaining launch milestones
 - [`CHANGELOG.md`](./CHANGELOG.md) — Chronological engineering log across all phases
+

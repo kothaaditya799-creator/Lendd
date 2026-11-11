@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DEFAULT_FALLBACK_UUID } from '../utils/lenderId';
+import { DEFAULT_FALLBACK_UUID } from '../utils/lenderId.ts';
 
 /* =========================================================================
    1. STRICT INPUT VALIDATION RULES (SWISS CHEESE LAYER 2)

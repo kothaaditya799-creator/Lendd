@@ -15,6 +15,8 @@ import {
   Download,
   ChevronDown,
   ChevronUp,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { db } from '../../db/dexie';
 import {
@@ -27,8 +29,10 @@ import { isBiometricsSupported, registerBiometricCredential } from '../../utils/
 import {
   getSupabaseConfig,
   saveSupabaseConfig,
+  isSupabaseConfigured,
 } from '../../db/supabaseClient';
-import { pushAllLocalDataToCloud } from '../../db/syncEngine';
+import { pushAllLocalDataToCloud, pullAllCloudData } from '../../db/syncEngine';
+import { getOrCreateLenderId, isValidUUID, setLenderId } from '../../utils/lenderId';
 import {
   canPromptPwaInstall,
   promptPwaInstall,
@@ -86,11 +90,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [cloudSaved, setCloudSaved] = useState(false);
   const [isPushingAll, setIsPushingAll] = useState(false);
   const [pushResult, setPushResult] = useState<string | null>(null);
+  const [deviceSyncId, setDeviceSyncId] = useState<string>(() => getOrCreateLenderId());
+  const [restoreSyncIdInput, setRestoreSyncIdInput] = useState<string>('');
+  const [copiedSyncId, setCopiedSyncId] = useState(false);
+  const [isPullingCloud, setIsPullingCloud] = useState(false);
+  const [pullResult, setPullResult] = useState<string | null>(null);
+
+  const refreshVaultCounts = async () => {
+    const [bCount, lCount, sCount] = await Promise.all([
+      db.borrowers.count(),
+      db.loans.count(),
+      db.schedules.count(),
+    ]);
+    setBorrowerCount(bCount);
+    setLoanCount(lCount);
+    setScheduleCount(sCount);
+  };
 
   useEffect(() => {
     if (isOpen) {
       setSecurityConfig(getSecurityConfig());
       isBiometricsSupported().then(setIsBioSupported);
+      const currentLender = getOrCreateLenderId();
+      setDeviceSyncId(currentLender);
+      setRestoreSyncIdInput(currentLender);
       const cfg = getSupabaseConfig();
       if (cfg) {
         setCloudUrl(cfg.url);
@@ -100,21 +123,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setCanInstallPwa(canPromptPwaInstall());
       const unsub = subscribePwaInstall((can) => setCanInstallPwa(can));
 
-      Promise.all([
-        db.borrowers.count(),
-        db.loans.count(),
-        db.schedules.count(),
-      ]).then(([bCount, lCount, sCount]) => {
-        setBorrowerCount(bCount);
-        setLoanCount(lCount);
-        setScheduleCount(sCount);
-      });
+      refreshVaultCounts();
 
       return () => {
         unsub();
       };
     }
   }, [isOpen]);
+
+  const handleCopySyncId = async () => {
+    try {
+      await navigator.clipboard?.writeText(deviceSyncId);
+      setCopiedSyncId(true);
+      setTimeout(() => setCopiedSyncId(false), 2000);
+    } catch {
+      // Clipboard unsupported in non-secure context; input remains selectable
+    }
+  };
 
   const handleSaveCloudConfig = () => {
     if (cloudUrl.trim() && cloudAnonKey.trim()) {
@@ -141,6 +166,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       }
     } finally {
       setIsPushingAll(false);
+    }
+  };
+
+  const handlePullFromCloud = async () => {
+    const candidateId = restoreSyncIdInput.trim();
+    if (!isValidUUID(candidateId)) {
+      setPullResult(
+        isTe
+          ? 'సరైన UUID Sync ID ను నమోదు చేయండి'
+          : 'Please enter a valid UUID Sync ID'
+      );
+      return;
+    }
+
+    setIsPullingCloud(true);
+    setPullResult(null);
+    try {
+      if (candidateId.toLowerCase() !== deviceSyncId.toLowerCase()) {
+        setLenderId(candidateId);
+        setDeviceSyncId(getOrCreateLenderId());
+      }
+      const res = await pullAllCloudData({ targetLenderId: candidateId });
+      if (res.success) {
+        await refreshVaultCounts();
+        setPullResult(
+          isTe
+            ? `✓ క్లౌడ్ నుండి ${res.totalApplied} మార్పులు పునరుద్ధరించబడ్డాయి`
+            : `✓ Restored ${res.borrowersApplied} borrowers, ${res.loansApplied} loans, ${res.schedulesApplied} milestones`
+        );
+      } else {
+        setPullResult(res.error || 'Failed to restore from cloud');
+      }
+    } finally {
+      setIsPullingCloud(false);
     }
   };
 
@@ -519,20 +578,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <button
                     type="button"
                     onClick={handleSaveCloudConfig}
-                    className="w-full min-h-[42px] rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs active:scale-95 transition-all mt-1"
+                    className="w-full min-h-[44px] rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs active:scale-95 transition-all mt-1"
                   >
                     {cloudSaved
                       ? isTe ? '✓ క్లౌడ్ కీలు భద్రపరచబడ్డాయి!' : '✓ Cloud Keys Saved!'
                       : isTe ? 'క్లౌడ్ కనెక్షన్‌ను భద్రపరచు' : 'Save Cloud Connection'}
                   </button>
 
+                  {/* Device Sync ID (Copy for New Phone Restore) */}
+                  <div className="pt-2 border-t border-slate-200/80 space-y-1.5">
+                    <label className="block text-[11px] font-bold text-slate-600">
+                      {isTe ? 'మీ డివైజ్ సింక్ ఐడి (కొత్త ఫోన్‌లో డేటా పొందడానికి)' : 'Your Device Sync ID (for Restoring on New Phone)'}
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        readOnly
+                        value={deviceSyncId}
+                        aria-label="Device Sync ID"
+                        className="flex-1 px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-[11px] text-slate-700 font-mono select-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCopySyncId}
+                        className="min-h-[44px] min-w-[44px] px-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all"
+                        title={isTe ? 'కాపీ చేయి' : 'Copy Sync ID'}
+                      >
+                        {copiedSyncId ? <Check size={14} className="text-emerald-700" /> : <Copy size={14} />}
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Initial Full Push to Cloud */}
                   <div className="pt-2 border-t border-slate-200/80">
                     <button
                       type="button"
-                      disabled={isPushingAll || !cloudUrl.trim() || !cloudAnonKey.trim()}
+                      disabled={isPushingAll || (!isSupabaseConfigured() && (!cloudUrl.trim() || !cloudAnonKey.trim()))}
                       onClick={handlePushAll}
-                      className="w-full min-h-[42px] rounded-lg bg-teal-50 border border-teal-300 text-teal-800 hover:bg-teal-100 disabled:opacity-50 text-xs font-bold active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                      className="w-full min-h-[44px] rounded-lg bg-teal-50 border border-teal-300 text-teal-800 hover:bg-teal-100 disabled:opacity-50 text-xs font-bold active:scale-95 transition-all flex items-center justify-center gap-1.5"
                     >
                       <Cloud size={14} className={isPushingAll ? 'animate-bounce' : ''} />
                       <span>
@@ -544,6 +627,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     {pushResult && (
                       <p className="mt-1 text-[11px] font-semibold text-teal-700 text-center">
                         {pushResult}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Pull / Restore From Cloud onto This Device */}
+                  <div className="pt-2 border-t border-slate-200/80 space-y-1.5">
+                    <label className="block text-[11px] font-bold text-slate-600">
+                      {isTe ? 'క్లౌడ్ నుండి పునరుద్ధరించండి (Sync ID నమోదు చేయండి)' : 'Restore From Cloud (Enter Sync ID)'}
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
+                      value={restoreSyncIdInput}
+                      onChange={(e) => setRestoreSyncIdInput(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-[11px] text-slate-900 focus:ring-2 focus:ring-teal-500 font-mono"
+                    />
+                    <button
+                      type="button"
+                      disabled={isPullingCloud || (!isSupabaseConfigured() && (!cloudUrl.trim() || !cloudAnonKey.trim()))}
+                      onClick={handlePullFromCloud}
+                      className="w-full min-h-[44px] rounded-lg bg-sky-50 border border-sky-300 text-sky-900 hover:bg-sky-100 disabled:opacity-50 text-xs font-bold active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <Download size={14} className={isPullingCloud ? 'animate-pulse' : ''} />
+                      <span>
+                        {isPullingCloud
+                          ? isTe ? 'డేటా డౌన్‌లోడ్ అవుతోంది...' : 'Restoring from cloud...'
+                          : isTe ? 'క్లౌడ్ నుండి డేటాను డౌన్‌లోడ్ చేయి' : 'Restore Data From Cloud'}
+                      </span>
+                    </button>
+                    {pullResult && (
+                      <p className="mt-1 text-[11px] font-semibold text-sky-800 text-center">
+                        {pullResult}
                       </p>
                     )}
                   </div>

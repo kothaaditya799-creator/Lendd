@@ -119,6 +119,7 @@ ALTER TABLE loans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payment_schedule ENABLE ROW LEVEL SECURITY;
 
 -- Borrowers Policy: Lenders see and modify records matching their authenticated UID or anon tenant UUID
+DROP POLICY IF EXISTS "Lender Borrowers Policy" ON borrowers;
 CREATE POLICY "Lender Borrowers Policy" ON borrowers
 FOR ALL USING (
   (auth.uid() = lender_id) OR
@@ -130,6 +131,7 @@ WITH CHECK (
 );
 
 -- Loans Policy: Lenders see and modify records matching their authenticated UID or anon tenant UUID
+DROP POLICY IF EXISTS "Lender Loans Policy" ON loans;
 CREATE POLICY "Lender Loans Policy" ON loans
 FOR ALL USING (
   (auth.uid() = lender_id) OR
@@ -141,6 +143,7 @@ WITH CHECK (
 );
 
 -- Payment Schedule Policy: Lenders see and modify records matching their authenticated UID or anon tenant UUID
+DROP POLICY IF EXISTS "Lender Schedules Policy" ON payment_schedule;
 CREATE POLICY "Lender Schedules Policy" ON payment_schedule
 FOR ALL USING (
   (auth.uid() = lender_id) OR
